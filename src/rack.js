@@ -13,7 +13,8 @@ export const RACK_FIELDS=[
   {k:'right',l:'Tubes on the right',d:5,step:1,range:[0,40],h:'0 makes a one-sided rack.'},
   {k:'gap',l:'Gap between tubes (mm)',d:3,step:0.5,range:[1.5,30]},
   {k:'holeClear',l:'Hole clearance (mm)',d:0.6,step:0.1,range:[0,5],h:'Added to the tube diameter. Tune it with the hole test strip.'},
-  {k:'cover',l:'Dark cover',d:'lid',opts:[['none','None'],['lid','Lift-off lid'],['hood','Full hood']],h:'The hood drops over everything, including the tube ends. Cut it from black acrylic for total darkness.'},
+  {k:'lid',l:'Lift-off lid',d:true,bool:true,h:'A red rack with a lid only needs its tube ends covered.'},
+  {k:'cover',l:'Tube end cover',d:'sheath',opts:[['none','None'],['caps','One cap per tube'],['sheath','One sheath per side'],['hood','Hood over everything']],h:'Caps and sheaths suit a red rack. The hood is for a rack cut from clear acrylic.'},
   {k:'numbers',l:'Engrave tube numbers',d:true,bool:true},
   {k:'t',l:'Sheet thickness, measured (mm)',d:3,step:0.01,range:[1.5,10]},
   {k:'kerf',l:'Kerf (mm)',d:0.15,step:0.01,range:[0,2]},
@@ -54,8 +55,8 @@ export function buildRack(input){
   const tabB=Math.min(10,Wi/3),tabS=Math.min(10,Hi-6);
   const cl=R.slotClear;
   const rowY=k=>{const s=(Wi-(k*D+(k-1)*gap))/2+D/2;return i=>s+i*(D+gap);};
-  const hood=R.cover==='hood',lid=R.cover==='lid';
-  const topTabs=lid||hood?true:false;
+  const hood=R.cover==='hood',lid=R.lid&&!hood;
+  const topTabs=lid;
 
   // where each cross plate sits along the rack
   const stops=[],combs=[],ends=[];
@@ -120,31 +121,65 @@ export function buildRack(input){
   // covers are separate so they can be cut from a different colour
   const cover=[];
   if(lid)cover.push({name:'lid',w:Lo,h:Wo,poly:rectPts(0,0,Lo,Wo),holes:topSlots,circles:[],labels:[]});
-  if(hood){
-    // a five-sided box sized to clear the tube ends, resting on the bench
-    const out=R.stick+4,hl=Lo-2*inset+2*out+(twoSided?0:-out+inset)+2*t,hw=Wo+1+2*t,hh=Hi+2*t+2;
-    const inL=hl-2*t,inW=hw-2*t,tl=10;
-    const xs=spread(inL,tl),ys=spread(inW,tl);
-    const sideH=Math.min(tl,hh-6);
+  // a four or five sided box with no bottom, resting on the bench
+  function box(name,inL,inW,hh,ends){
+    const tl=10,xs=spread(inL,tl),ys=spread(inW,tl),sideH=Math.min(tl,hh-6),hl=inL+2*t,hw=inW+2*t;
+    const endX=ends===2?[t/2,hl-t/2]:[hl-t/2];
     const top=[];
-    for(const y of [t/2,hw-t/2])for(const u of xs)top.push(slotAlong(t+u,y,tl));
-    for(const x of [t/2,hl-t/2])for(const u of ys)top.push(slotAcross(x,t+u,tl));
-    cover.push({name:'hood top',w:hl,h:hw,poly:rectPts(0,0,hl,hw),holes:top,circles:[],labels:[]});
+    for(const y of [t/2+3,hw+3-t/2])for(const u of xs)top.push(slotAlong(t+u,y,tl));
+    for(const x of endX)for(const u of ys)top.push(slotAcross(x,t+3+u,tl));
+    cover.push({name:name+' top',w:hl+3,h:hw+6,poly:rectPts(-3,0,hl+3,hw+6).map(([x,y])=>[x+3,y]),holes:top.map(p=>p.map(([x,y])=>[x+3,y])),circles:[],labels:[]});
     for(let i=0;i<2;i++){
       const p=plate(hl,hh,{top:xs.map(u=>({u:t+u,l:tl,d:t}))});
-      const holes=[t/2,hl-t/2].map(x=>rectPts(x-t/2-cl/2,p.oy+hh/2-sideH/2-cl/2,x+t/2+cl/2,p.oy+hh/2+sideH/2+cl/2));
-      cover.push({name:'hood side',w:p.w,h:p.h,poly:p.poly,holes,circles:[],labels:[]});
+      const holes=endX.map(x=>rectPts(x-t/2-cl/2,p.oy+hh/2-sideH/2-cl/2,x+t/2+cl/2,p.oy+hh/2+sideH/2+cl/2));
+      cover.push({name:name+' side',w:p.w,h:p.h,poly:p.poly,holes,circles:[],labels:[]});
+    }
+    for(let i=0;i<ends;i++){
       const q=plate(inW,hh,{top:ys.map(u=>({u,l:tl,d:t})),left:[{u:hh/2,l:sideH,d:t}],right:[{u:hh/2,l:sideH,d:t}]});
-      cover.push({name:'hood end',w:q.w,h:q.h,poly:q.poly,holes:[],circles:[],labels:[]});
+      cover.push({name:name+' end',w:q.w,h:q.h,poly:q.poly,holes:[],circles:[],labels:[]});
+    }
+    return {hl,hw};
+  }
+  const rackH=Hi+2*t,reach=R.stick+4;
+  let hoodSize=null,sheathSize=null;
+  if(hood){
+    // for a clear rack: one box over everything, sized to clear the tube ends
+    const inL=twoSided?Lo-2*inset+2*reach:Lo-inset+reach;
+    hoodSize=box('hood',inL,Wo+1,rackH+3,2);
+  }
+  if(R.cover==='sheath'){
+    // for a red rack: slides over one end, covering every tube end on that side
+    const overlap=15,inL=inset+reach+overlap;
+    for(let i=0;i<(twoSided?2:1);i++)sheathSize=box('sheath',inL,Wo+1,rackH+1,1);
+  }
+  const capW=R.tubeD+0.6;                        // inside width of a cap
+  const capOut=capW+2*t,capLen=R.stick+3+t;
+  if(R.cover==='caps'){
+    const need=capOut+0.5-D;
+    if(gap<need)errors.push(`Caps are ${fmt(capOut)}mm wide, so neighbours would hit each other. Set the gap to at least ${fmt(need)}mm, or use a sheath.`);
+    const fl=capLen/2;
+    for(let i=0;i<R.left+R.right;i++){
+      // box joints along the corners: two wide sides with notches, two narrow with tabs
+      for(let k=0;k<2;k++){
+        const p=plate(capOut,capLen,{left:[{u:capLen/2,l:fl,d:-t}],right:[{u:capLen/2,l:fl,d:-t}]});
+        const y=p.oy+t+3-t/2,c=capOut/2+p.ox,sw=capW/2;
+        cover.push({name:'cap wide side',w:p.w,h:p.h,poly:p.poly,holes:[rectPts(c-sw/2-cl/2,y-t/2-cl/2,c+sw/2+cl/2,y+t/2+cl/2)],circles:[],labels:[]});
+        const q=plate(capW,capLen,{left:[{u:capLen/2,l:fl,d:t}],right:[{u:capLen/2,l:fl,d:t}]});
+        const qy=q.oy+t+3-t/2,qc=capW/2+q.ox;
+        cover.push({name:'cap narrow side',w:q.w,h:q.h,poly:q.poly,holes:[rectPts(qc-sw/2-cl/2,qy-t/2-cl/2,qc+sw/2+cl/2,qy+t/2+cl/2)],circles:[],labels:[]});
+      }
+      const e=plate(capW,capW,['top','right','bottom','left'].reduce((o,k)=>(o[k]=[{u:capW/2,l:capW/2,d:t}],o),{}));
+      cover.push({name:'cap end',w:e.w,h:e.h,poly:e.poly,holes:[],circles:[],labels:[]});
     }
   }
   for(const p of [...parts,...cover])if(p.w>R.stockW-10||p.h>R.stockH-10)errors.push(`The ${p.name} is ${fmt(p.w)} x ${fmt(p.h)}mm, too big for the ${R.stockW} x ${R.stockH}mm sheet.`);
   if(hood)warnings.push('A hood blocks air and light. Tubes breathe through their cotton, so lift it often to check for condensation or mould.');
+  if(R.cover==='sheath'||R.cover==='caps')warnings.push('Cut covers from red acrylic, the same as the rack. Check each tube can still breathe through its cotton.');
   const tubes=[];
   const row=(k,x0,x1,tag)=>{const y=rowY(k);for(let i=0;i<k;i++)tubes.push({x0,x1,y:edge+t+y(i),id:tag+(i+1)});};
   row(R.left,inset-R.stick,inset+run,'L');
   if(twoSided)row(R.right,Lo-inset-run,Lo-inset+R.stick,'R');
-  return {R,parts,cover,errors,warnings,Lo,Wo,Hi,D,run,tubes,inset,edge,stops,ends,combs:combs.map(c=>c.x)};
+  return {R,parts,cover,errors,warnings,Lo,Wo,Hi,D,run,tubes,inset,edge,stops,ends,combs:combs.map(c=>c.x),capOut,capLen,hoodSize,sheathSize,rackH};
 }
 
 function nest(items,R){
@@ -174,7 +209,7 @@ export function rackFiles(rack,colors={cutColor:'#ff0000',engraveColor:'#000000'
     });
   };
   draw(rack.parts,'rack-sheet','Test tube rack parts');
-  if(rack.cover.length)draw(rack.cover,'rack-cover','Rack cover: cut from black acrylic for total darkness');
+  if(rack.cover.length)draw(rack.cover,'rack-cover','Rack covers, kept separate so they can be cut from another colour');
   return files;
 }
 // holes either side of the chosen size, to find the fit for real tubes

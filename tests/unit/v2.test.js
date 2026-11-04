@@ -166,10 +166,24 @@ test('test piece door slots really change the side gap, and no line is cut twice
     assert.ok(ds.some(d=>{const n=[...d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map(q=>+q[1]);return (Math.max(...n)-Math.min(...n)).toFixed(3)===want;}),`no slot for fit ${f}`);
   }
 });
+test('test piece includes the heat groove, vial holder and angled joint samples',()=>{
+  const r=run();
+  const data=testPiece(r.G,r.P).data;
+  for(const s of ['HEAT GROOVE','VIAL HOLDER','ANGLED JOINT'])assert.ok(data.includes(s),s);
+  const walls=[...data.matchAll(/<circle/g)].length;
+  assert.equal(walls,7,'6 vent holes plus the vial hole');
+  // the groove sample is one piece: a slot with a 3mm rim
+  assert.ok(data.includes('M10.075 128.075'),'groove slot starts 3mm in from the plate edge');
+  // rotated slot sits at 45 degrees
+  const pts=[...data.matchAll(/d="(M[^"]+)"/g)].map(m=>[...m[1].matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map(q=>[+q[1],+q[2]]));
+  const angled=pts.filter(p=>p.length===4&&Math.abs(p[0][0]-p[1][0])>1&&Math.abs(p[0][1]-p[1][1])>1);
+  assert.equal(angled.length,1);
+  assert.ok(Math.abs(Math.abs((p=>(p[1][1]-p[0][1])/(p[1][0]-p[0][0]))(angled[0]))-1)<0.01);
+});
 test('test piece exports cleanly and fits its sheet',()=>{
   const r=run();
   const f=testPiece(r.G,r.P);
   assert.doesNotMatch(f.data,/NaN|undefined|Infinity/);
   for(const m of f.data.matchAll(/d="M([^"]+)"/g))for(const q of m[1].matchAll(/(-?[\d.]+) (-?[\d.]+)/g))
-    assert.ok(+q[1]>-1&&+q[1]<171&&+q[2]>-1&&+q[2]<121,q[0]);
+    assert.ok(+q[1]>-1&&+q[1]<171&&+q[2]>-1&&+q[2]<186,q[0]);
 });

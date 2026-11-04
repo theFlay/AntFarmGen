@@ -154,7 +154,7 @@ export function exporters(G,L,P,geo){
 // One small sheet that checks kerf, tab fit, door fit, peg fit and vent sizes before a full cut.
 export function testPiece(G,P){
   const d=pen(P),t=G.t,b=[];
-  const W=170,H=120;
+  const W=170,H=185;
   const lab=(x,y,s)=>d.txt(x,y,s,2.4);
   // kerf comb: a 50mm block cut into 5. Measure the stack squeezed together.
   b.push(lab(32,4,'KERF: 5 x 10mm, measure stack'));
@@ -202,5 +202,27 @@ export function testPiece(G,P){
     const sx=95+i*11;
     b.push(d.rect({x0:sx-v/2,x1:sx+v/2,y0:98,y1:106}));b.push(lab(sx,110,fmt(v)));
   });
+  // heat groove: does your cable fit, and does a 3mm rim survive handling?
+  b.push(lab(35,122,'HEAT GROOVE'));
+  const gw=P.heatEdgeW;
+  b.push(d.outline(rectPts(5,125,65,125+3+gw+12)));
+  b.push(d.rect({x0:10,x1:60,y0:128,y1:128+gw}));
+  // vial holder: ring and post, with its blind slot in a sample sheet
+  b.push(lab(100,122,'VIAL HOLDER'));
+  const vr=rectPts(72,125,72+42,125+P.vialD+8);
+  b.push(d.outline(vr));
+  b.push(d.hole(93,125+(P.vialD+8)/2,P.vialD));
+  for(const x of [72+4,72+38])b.push(d.rect({x0:x-2.1,x1:x+2.1,y0:125+(P.vialD+8)/2-t/2-0.1,y1:125+(P.vialD+8)/2+t/2+0.1}));
+  b.push(d.outline(rectPts(118,125,122,125+P.S+3*t+1)));
+  // angled joint: a straight strip and a 45 degree strip that butts it, in one sample sheet
+  b.push(lab(145,122,'ANGLED JOINT'));
+  b.push(d.outline(rectPts(127,125,165,160)));
+  const c45=Math.SQRT1_2,tl=8,mx=146,my=131,ax=mx+c45*14,ay=my+t/2+c45*(14+t/2)+c45*0;
+  b.push(d.rect({x0:mx-tl/2,x1:mx+tl/2,y0:my-t/2,y1:my+t/2}));
+  const hx=tl/2,hy=t/2;
+  b.push(d.rect({poly:[[ax-c45*hx+c45*hy,ay-c45*hx-c45*hy],[ax+c45*hx+c45*hy,ay+c45*hx-c45*hy],[ax+c45*hx-c45*hy,ay+c45*hx+c45*hy],[ax-c45*hx-c45*hy,ay-c45*hx+c45*hy]]}));
+  const strip={s:0,e:28,top:[14],bot:[14],notches:[]};
+  b.push(d.outline(stripOutline(strip,G,P),5,160+P.S));
+  b.push(d.outline(stripOutline(strip,G,P),40,160+P.S));
   return {name:'test-piece.svg',data:svgDoc(W,H,b.join('\n'),'Fit test piece')};
 }
