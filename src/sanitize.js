@@ -27,6 +27,10 @@ export function cleanLayout(l,G){
     if(u.length===3&&h!=='a'&&h!=='b')fail('bad half cell');
     return u.length===3?[r,c,h]:[r,c];
   };
+  const cellList=(v,name)=>{
+    if(!Array.isArray(v)||v.length>cols*rows)fail(`${name} list is bad`);
+    return v.map(u=>{if(!Array.isArray(u)||u.length!==2)fail(`bad cell in ${name}`);return cell(u);});
+  };
   return {
     cols,rows,
     active:grid(l.active,rows,cols,'active',bool),
@@ -36,6 +40,8 @@ export function cleanLayout(l,G){
     diag:grid(l.diag,rows,cols,'diag',diag),
     jogH:grid(l.jogH,rows+1,cols,'jogH',jog),
     jogV:grid(l.jogV,rows,cols+1,'jogV',jog),
+    sensors:cellList(l.sensors,'sensors'),
+    pillars:cellList(l.pillars,'pillars'),
     merges:l.merges.map(m=>{
       if(!m||!Array.isArray(m.cells)||m.cells.length<2||m.cells.length>cols*rows*2)fail('bad chamber group');
       return {cells:m.cells.map(cell),brood:m.brood===true};

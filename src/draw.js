@@ -15,6 +15,7 @@ export function drawTopdown(G,L,P,geo,rules,opts){
     const r=sp.orient==='H'?[sp.uc-L2,sp.c-D/2,sp.Ls,D]:[sp.c-D/2,sp.uc-L2,D,sp.Ls];
     o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="#4a90d9"/>`);
   }
+  for(const b of geo.sensorBoxes)o.push(`<rect x="${fmt(b.x0)}" y="${fmt(b.y0)}" width="${fmt(b.x1-b.x0)}" height="${fmt(b.y1-b.y0)}" fill="#c9b6e8"/>`);
   for(const f of geo.frame){
     o.push(`<path d="${polyD(f.poly)}${f.hole?' '+polyD(f.hole):''}" fill="#b9c3c6" fill-rule="evenodd" stroke="#7d898c" stroke-width="0.4"/>`);
   }

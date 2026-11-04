@@ -8,6 +8,10 @@ Ideas and bug reports are welcome in [Issues](https://github.com/theFlay/AntFarm
 
 This repo is public: see [SECURITY.md](SECURITY.md). Pushes to `develop` publish the committed `index.html`, so run `npm test` before pushing.
 
+## Licence
+
+Open source under the [MIT licence](LICENSE). Use it, change it and share it freely.
+
 ## Working on it
 
 ```

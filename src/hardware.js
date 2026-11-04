@@ -70,6 +70,10 @@ export function hardwareParts(G,L,P,geo){
   const nPorts=geo.ports.filter(p=>p.cut).length;
   if(nPorts){out.push(Object.assign(plugPart(G,P),{qty:nPorts*P.layers}),Object.assign(plugPinPart(G),{qty:nPorts}));}
   if(P.coverType==='whole'&&geo.sockets.length)out.push(Object.assign(coverLeg(G,P,geo),{qty:geo.sockets.length}));
+  if(geo.sensorBoxes.length){
+    const w=P.sensorW-0.2,h=P.sensorH-0.2;
+    out.push({name:'sensor plug',w,h,poly:rectPts(0,0,w,h),holes:[],qty:geo.sensorBoxes.length});
+  }
   if(P.orient==='upright')out.push(Object.assign(footPart(G,P),{qty:2}));
   return out;
 }

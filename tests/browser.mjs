@@ -76,6 +76,16 @@ await check('diagonal and jog tools need the toggle, then work, and undo restore
   await clickSvg(p,`[data-edge="H,${edge[0]},${edge[1]}"]`);
   assert.equal(await p.evaluate(()=>window.__nest.state.geo.pieces.filter(q=>q.kind==='angle').length),n+2);
 });
+await check('sensor and pillar tools add and remove, and the status pill reacts',async p=>{
+  await p.click('[data-tool="pillar"]');
+  await clickSvg(p,'[data-cell="1,1"]');
+  assert.equal(await p.evaluate(()=>window.__nest.state.L.pillars.length),1);
+  await clickSvg(p,'[data-cell="1,1"]');
+  assert.equal(await p.evaluate(()=>window.__nest.state.L.pillars.length),0);
+  assert.match(await p.$eval('#pill',e=>e.textContent),/Ready/);
+  await setField(p,'p_tunnelH',11.5);
+  assert.match(await p.$eval('#pill',e=>e.textContent),/problem/);
+});
 await check('export buttons are enabled when rules pass, disabled on an error',async p=>{
   assert.equal(await p.evaluate(()=>window.__nest.state.rules.ok),true);
   assert.equal(await p.$eval('#exports button[data-file="0"]',b=>b.disabled),false);

@@ -44,6 +44,7 @@ export function generate(G,P){
   for(const c of ch.list)for(const u of c.cells)setActive(L,u,start.has(c.id));
   placeSponges(G,P,L,ch,start,rnd);
   if(P.angled)placeJogs(G,P,L,ch,rnd);
+  if(P.broodPillar)for(const c of ch.list)if(c.brood)L.pillars.push(c.cells[0].slice(0,2));
   return L;
 }
 // spanning tree with at most 3 tunnels per chamber, relaxed only when no diagonals are left to drop

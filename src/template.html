@@ -5,100 +5,137 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src '__SCRIPT_HASH__'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
+<meta name="description" content="Design all-acrylic ant nest panels and download laser cut files.">
 <title>Ant nest panel generator</title>
 <style>
-:root{--bg:#f6f5f2;--card:#fff;--ink:#1f1e1c;--muted:#6b6a65;--line:#d9d6cf;--accent:#5b4fc4;--err:#c0392b;--warn:#b7791f;--ok:#2f855a}
-@media (prefers-color-scheme:dark){:root{--bg:#1b1b1a;--card:#262624;--ink:#ecebe7;--muted:#a3a19a;--line:#3a3936;--accent:#9d93f0;--err:#ef6b5b;--warn:#e0a84a;--ok:#5cc28c}}
+:root{--bg:#f6f3ee;--card:#fffdfa;--ink:#26221c;--muted:#736c60;--line:#e4ded3;--soft:#efeae1;--accent:#a34a22;--accent-ink:#fff;--err:#b3261e;--warn:#92620d;--ok:#2d7a4f;--shadow:0 1px 2px rgba(60,45,20,.06),0 4px 16px rgba(60,45,20,.05)}
+@media (prefers-color-scheme:dark){:root{--bg:#191714;--card:#221f1b;--ink:#efeae2;--muted:#a79f92;--line:#37322b;--soft:#2c2823;--accent:#e08a5b;--accent-ink:#22150c;--err:#f08a80;--warn:#e3b45c;--ok:#6fcb97;--shadow:none}}
 *{box-sizing:border-box}
-body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
-header{padding:12px 16px;border-bottom:1px solid var(--line)}
-h1{font-size:18px;margin:0;font-weight:600}
-.sub{color:var(--muted);font-size:13px}
-.wrap{display:grid;grid-template-columns:350px 1fr;gap:12px;padding:12px;align-items:start}
-@media(max-width:900px){.wrap{grid-template-columns:1fr}main{order:-1}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}
-details>summary{cursor:pointer;font-weight:600;padding:2px 0}
-.field{display:grid;grid-template-columns:1fr 110px;gap:4px 8px;align-items:center;margin:7px 0}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;max-width:1560px;margin:0 auto;padding:20px 24px 8px}
+h1{font-size:22px;line-height:1.2;margin:0;font-weight:680;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:13.5px;margin-top:2px}
+.pill{display:inline-block;padding:5px 12px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+.pill.good{color:var(--ok);border-color:currentColor}
+.pill.warn{color:var(--warn);border-color:currentColor}
+.pill.bad{color:var(--err);border-color:currentColor}
+.wrap{display:grid;grid-template-columns:330px minmax(0,1fr);gap:16px;max-width:1560px;margin:0 auto;padding:12px 24px 24px;align-items:start}
+aside{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);scrollbar-width:thin}
+@media(max-width:980px){.wrap{grid-template-columns:1fr;padding:12px}main{order:-1}aside{position:static;max-height:none}.top{padding:16px 12px 4px}}
+.group{border-bottom:1px solid var(--line);padding:0 14px}
+.group:last-child{border-bottom:0}
+details>summary{cursor:pointer;font-weight:620;padding:11px 0;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details>summary::-webkit-details-marker{display:none}
+details>summary::after{content:"";width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;margin-right:3px}
+details[open]>summary::after{transform:rotate(45deg)}
+details[open]{padding-bottom:10px}
+.field{display:grid;grid-template-columns:1fr 132px;gap:2px 10px;align-items:center;margin:9px 0}
 .field label{font-size:13px}
-.field small{grid-column:1/-1;color:var(--muted);font-size:12px;margin-top:-2px}
-input,select{width:100%;padding:5px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
-input[type=checkbox]{width:auto;justify-self:start}
-input[type=color]{height:30px;padding:2px}
-button{font:inherit;padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
-button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.field small{grid-column:1/-1;color:var(--muted);font-size:12px;line-height:1.35}
+input,select{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+input:focus,select:focus,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=checkbox]{width:18px;height:18px;justify-self:end;accent-color:var(--accent)}
+input[type=color]{height:32px;padding:2px}
+button{font:inherit;font-size:13px;padding:6px 11px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;transition:background .12s}
+button:hover:not(:disabled){background:var(--soft)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.08)}
 button:disabled{opacity:.45;cursor:not-allowed}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card h2{font-size:14px;font-weight:650;margin:0 0 6px}
 .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.tools button.on{outline:2px solid var(--accent);outline-offset:1px}
-#preview svg{width:100%;height:auto;display:block;touch-action:manipulation;margin-top:8px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--soft);border-radius:10px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;padding:5px 10px;border-radius:7px}
+.seg button:hover:not(:disabled){background:var(--card)}
+.seg button.on{background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.14);font-weight:620}
+#preview svg{width:100%;height:auto;display:block;touch-action:manipulation;margin-top:10px;border-radius:8px}
 .msg{font-size:13px;margin:3px 0}
 .msg.error{color:var(--err)}.msg.warn{color:var(--warn)}.msg.ok{color:var(--ok)}.msg.info{color:var(--muted)}
-.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:3px 14px;font-size:13px;margin-top:4px}
+#toolhelp{min-height:20px;margin-top:8px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.two .card{margin-bottom:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 16px;font-size:13px}
 .stats span{color:var(--muted)}
-.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted);margin-top:6px}
-.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:1px solid rgba(0,0,0,.2)}
-#status{font-size:13px;color:var(--muted);min-height:18px;margin-top:6px}
-.derived{font-size:12px;color:var(--muted);margin-top:6px}
-footer{display:flex;flex-wrap:wrap;gap:6px 18px;padding:12px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.stats .wide{grid-column:1/-1}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted);margin-top:10px}
+.sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:5px;border:1px solid rgba(0,0,0,.15)}
+#status{font-size:13px;color:var(--muted);min-height:18px;margin-top:8px}
+.derived{font-size:12px;color:var(--muted);margin:6px 0 2px}
+.note{color:var(--muted);font-size:13px;margin:0 0 10px}
+footer{max-width:1560px;margin:0 auto;display:flex;flex-wrap:wrap;gap:6px 20px;padding:4px 24px 28px;font-size:13px;color:var(--muted)}
 footer a{color:var(--accent)}
 </style>
 </head>
 <body>
-<header>
-  <h1>Ant nest panel generator</h1>
-  <div class="sub">All-acrylic nest panels for a CO2 laser. Shared walls, tab-and-slot assembly, a door on every tunnel.</div>
+<header class="top">
+  <div>
+    <h1>Ant nest panel generator</h1>
+    <div class="sub">Enter your sizes, laser-cut the files, and build an all-acrylic nest like a jigsaw.</div>
+  </div>
+  <span id="pill" class="pill good">Ready to export</span>
 </header>
 <div class="wrap">
-  <aside id="controls"></aside>
+  <aside id="controls" aria-label="Settings"></aside>
   <main>
-    <div class="card">
-      <div class="row tools" id="tools">
-        <span>Edit:</span>
-        <button data-tool="wall" class="on">Walls</button>
-        <button data-tool="cell">Starting area</button>
-        <button data-tool="merge">Brood 2x2</button>
-        <button data-tool="join">Join cells</button>
-        <button data-tool="diag">Diagonal</button>
-        <button data-tool="jog">Jog</button>
-        <button id="undo">Undo</button>
-        <span style="flex:1"></span>
-        <button id="reseed">New seed</button>
-        <button id="regen" class="primary">Generate layout</button>
+    <section class="card">
+      <div class="bar">
+        <div class="seg tools" id="tools" role="group" aria-label="Edit tools">
+          <button data-tool="wall" class="on">Walls</button>
+          <button data-tool="cell">Starting area</button>
+          <button data-tool="merge">Brood</button>
+          <button data-tool="join">Join</button>
+          <button data-tool="diag">Diagonal</button>
+          <button data-tool="jog">Jog</button>
+          <button data-tool="sensor">Sensor</button>
+          <button data-tool="pillar">Pillar</button>
+        </div>
+        <div class="row">
+          <button id="undo">Undo</button>
+          <button id="reseed">New seed</button>
+          <button id="regen" class="primary">Generate</button>
+        </div>
       </div>
       <div id="toolhelp" class="msg info"></div>
       <div id="preview"></div>
       <div class="legend">
-        <span><i class="sw" style="background:#e9d5a6"></i>Chamber</span>
+        <span><i class="sw" style="background:#e9d5a6"></i>Open chamber</span>
         <span><i class="sw" style="background:#8a8a86"></i>Behind closed doors</span>
+        <span><i class="sw" style="background:#2fb37a"></i>Tunnel or port</span>
         <span><i class="sw" style="background:#e8933a"></i>Closed door</span>
-        <span><i class="sw" style="background:#5b4fc4"></i>Wall strip</span>
-        <span><i class="sw" style="background:#7a4fc4"></i>Angled strip</span>
-        <span><i class="sw" style="background:#2fb37a"></i>Tunnel</span>
-        <span><i class="sw" style="background:#4a90d9"></i>Sponge pocket</span>
-        <span><i class="sw" style="background:#b9c3c6"></i>Frame</span>
+        <span><i class="sw" style="background:#5b4fc4"></i>Wall</span>
+        <span><i class="sw" style="background:#7a4fc4"></i>Angled wall</span>
+        <span><i class="sw" style="background:#4a90d9"></i>Sponge</span>
+        <span><i class="sw" style="background:#c9b6e8"></i>Sensor</span>
         <span><i class="sw" style="background:#fff4c2"></i>Joiner slot</span>
+        <span><i class="sw" style="background:#f3b0b2"></i>Cover socket</span>
         <span><i class="sw" style="background:#e5484d"></i>Problem</span>
       </div>
+    </section>
+    <div class="two">
+      <section class="card"><h2>Checks</h2><div id="checks"></div></section>
+      <section class="card"><h2>Summary</h2><div id="stats" class="stats"></div></section>
     </div>
-    <div class="card"><b>Checks</b><div id="checks"></div></div>
-    <div class="card"><b>Summary</b><div id="stats" class="stats"></div></div>
-    <div class="card"><b>Export cut files (SVG, mm)</b>
-      <div class="msg info">Red = cut, black = engrave (change below). Kerf is already applied. Every file is drawn at 1:1 in millimetres.</div>
-      <div class="row" id="exports" style="margin-top:6px"></div>
-      <div class="row" style="margin-top:8px">
-        <button id="testPiece">Fit test piece (.svg)</button>
-        <button id="saveLayout">Save layout (.json)</button>
+    <section class="card">
+      <h2>Cut files</h2>
+      <p class="note">SVG at 1:1 in millimetres, with kerf already applied. Red is cut and black is engrave, and you can change both under Export.</p>
+      <div class="row" id="exports"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="testPiece">Fit test piece</button>
+        <button id="saveLayout">Save layout</button>
         <button id="loadBtn">Load layout</button>
         <input type="file" id="loadLayout" accept=".json,application/json" hidden>
       </div>
       <div id="status"></div>
-    </div>
+    </section>
   </main>
 </div>
 <footer>
   <a href="https://github.com/theFlay/AntFarmGen/issues/new/choose" rel="noopener">Suggest an idea or report a bug</a>
   <a href="https://github.com/theFlay/AntFarmGen/discussions" rel="noopener">Discussions</a>
   <a href="https://github.com/theFlay/AntFarmGen" rel="noopener">Source code</a>
-  <span>Everything runs in your browser. Nothing you enter is sent anywhere.</span>
+  <span>Open source under the MIT licence. Everything runs in your browser, and nothing you enter is sent anywhere.</span>
 </footer>
 <script>
 /*__BUNDLE__*/

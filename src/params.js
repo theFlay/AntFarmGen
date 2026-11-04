@@ -51,6 +51,11 @@ export const PARAMS=[
   {k:'ventD',l:'Air vent hole diameter (mm)',d:1,step:0.1},
   {k:'ventGrid',l:'Air vents per chamber (n x n)',d:3,step:1},
  ]],
+ ['Sensors and pillars',false,[
+  {k:'sensorW',l:'Sensor pocket width (mm)',d:16,step:0.5,h:'Fits a DHT22 (about 15 x 25 x 8mm). Use smaller for an SHT40 board.'},
+  {k:'sensorH',l:'Sensor pocket length (mm)',d:26,step:0.5},
+  {k:'broodPillar',l:'Pillar in each brood chamber',d:false,bool:true,h:'A short post that stops the sheets bowing. Add others with the Pillar tool.'},
+ ]],
  ['Auto layout',true,[
   {k:'seed',l:'Seed',d:1234,step:1},
   {k:'brood',l:'Brood chambers (2x2)',d:1,step:1},
@@ -76,12 +81,12 @@ export const PARAMS=[
   {k:'engraveIds',l:'Engrave part IDs',d:true,bool:true},
  ]],
 ];
-export const GEN_KEYS=new Set(['seed','brood','oddShare','oddMax','angled','diagShare','jogShare','jogSize','activeCount','growFrom','loops','sponges','dampSide']);
+export const GEN_KEYS=new Set(['broodPillar','seed','brood','oddShare','oddMax','angled','diagShare','jogShare','jogSize','activeCount','growFrom','loops','sponges','dampSide']);
 export // sane limits, which also stop a bad value from freezing the page
 const RANGES={W:[60,3000],H:[60,3000],B:[5,100],workerLen:[1,100],queenLen:[1,100],queenWidth:[1,100],pitchFactor:[1,10],tunnelW:[1,100],
   t:[0.5,20],layers:[1,20],S:[0.5,20],tunnelH:[1,200],tabL:[2,100],tabPitch:[5,500],kerf:[0,2],slotClear:[-2,2],doorFit:[0,2],doorGrip:[3,30],
   lipH:[0,30],pegW:[4,30],coverStand:[1,100],portPitch:[0,2000],portOffset:[0,2000],boltD:[1,30],boltSpacing:[10,1000],spongeD:[1,100],
   spongeLen:[1,500],slotW:[0.1,20],fillD:[0.5,50],ventD:[0.1,20],ventGrid:[0,8],seed:[0,1e9],brood:[0,30],oddShare:[0,1],oddMax:[2,12],
-  activeCount:[0,1000],loops:[0,1],sponges:[0,200],stockW:[50,3000],stockH:[50,3000],diagShare:[0,1],jogShare:[0,1],jogSize:[0,50],joinerQty:[0,50]};
+  activeCount:[0,1000],loops:[0,1],sponges:[0,200],stockW:[50,3000],stockH:[50,3000],diagShare:[0,1],jogShare:[0,1],jogSize:[0,50],joinerQty:[0,50],sensorW:[5,80],sensorH:[5,80]};
 for(const g of PARAMS)for(const f of g[2])if(RANGES[f.k])f.range=RANGES[f.k];
 export const ALL_FIELDS=PARAMS.flatMap(g=>g[2]);

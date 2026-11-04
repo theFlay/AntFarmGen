@@ -140,6 +140,37 @@ export function buildGeometry(G,L,P){
       }
     }
   }
+  // sensor pockets: a vented box in a chamber corner, opening through the service sheet
+  const sensorBoxes=[];
+  L.sensors.forEach(([r,c],n)=>{
+    const sw=P.sensorW,sh=P.sensorH,id='N'+(n+1);
+    const solid={
+      top:r===0||(hS(r,c)==='solid'&&!L.jogH[r][c]),bottom:r===rows-1||(hS(r+1,c)==='solid'&&!L.jogH[r+1][c]),
+      left:c===0||(vS(r,c)==='solid'&&!L.jogV[r][c]),right:c===cols-1||(vS(r,c+1)==='solid'&&!L.jogV[r][c+1]),
+    };
+    const corner=[['top','left'],['top','right'],['bottom','left'],['bottom','right']].find(([a,b])=>solid[a]&&solid[b]);
+    if(L.diag[r][c]||!corner){errors.push(`Sensor pocket ${id} needs two solid walls meeting at a corner of its cell.`);return;}
+    if(sw+2*t+8>cellW||sh+2*t+8>cellH){errors.push(`Sensor pocket ${id} is too big for this cell.`);return;}
+    const sx=corner[1]==='left'?1:-1,sy=corner[0]==='top'?1:-1;
+    const ex=sx>0?xs[c]+(c===0?0:t/2):xs[c+1]-(c===cols-1?0:t/2);
+    const ey=sy>0?ys[r]+(r===0?0:t/2):ys[r+1]-(r===rows-1?0:t/2);
+    const fx=ex+sx*sw,fy=ey+sy*sh,gx=ex+sx*(sw+t),gy=ey+sy*(sh+t);
+    const v=push('V','N',ex+sx*(sw+t/2),Math.min(ey,gy),Math.max(ey,gy),[],'vent');
+    const h=push('H','N',ey+sy*(sh+t/2),Math.min(ex,fx),Math.max(ex,fx),[],'vent');
+    if(v){v.id=id+'a';v.adapt=true;}
+    if(h){h.id=id+'b';h.adapt=true;}
+    sensorBoxes.push({id,x0:Math.min(ex,fx),x1:Math.max(ex,fx),y0:Math.min(ey,fy),y1:Math.max(ey,fy),
+      outer:{x0:Math.min(ex,gx),x1:Math.max(ex,gx),y0:Math.min(ey,gy),y1:Math.max(ey,gy)}});
+  });
+  // support pillars: a short tabbed post that ties the two sheets together
+  const pillarSpots=[];
+  L.pillars.forEach(([r,c],n)=>{
+    if(L.diag[r][c]){errors.push('A pillar cannot go in a cell with a diagonal.');return;}
+    const cham=ch.list[ch.of(r,c)];
+    const [x,y]=cham.brood?chamberCenter(G,cham):[(xs[c]+xs[c+1])/2,(ys[r]+ys[r+1])/2];
+    const pc=push('H','Q',y,x-6,x+6,[],'pillar');
+    if(pc){pc.id='Q'+(n+1);pc.adapt=true;pillarSpots.push({x0:x-6,x1:x+6,y0:y-t/2,y1:y+t/2});}
+  });
   // diagonal walls run corner to corner
   for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
     if(L.diag[r][c]===1)angles.push([[xs[c],ys[r+1]],[xs[c+1],ys[r]]]);
@@ -296,6 +327,12 @@ export function buildGeometry(G,L,P){
     if(c.merged&&!c.brood)for(const u of c.cells)ventAt(unitCenter(G,u));
     else ventAt(chamberCenter(G,c));
   }
+  // no vents inside a sensor pocket or under a pillar
+  const clearOf=[...sensorBoxes.map(b=>b.outer),...pillarSpots];
+  for(let i=vents.length-1;i>=0;i--){
+    const v=vents[i];
+    if(clearOf.some(b=>v.x>b.x0-2&&v.x<b.x1+2&&v.y>b.y0-2&&v.y<b.y1+2))vents.splice(i,1);
+  }
   // sanity checks
   if(depth<=0)errors.push('Depth must be above 0.');
   if(tunnelH>=depth-1)errors.push(`Tunnel height ${f1(tunnelH)}mm leaves no bridge above it (depth ${f1(depth)}mm).`);
@@ -327,7 +364,7 @@ export function buildGeometry(G,L,P){
     const dx=Math.max(p.x0-q.x1,q.x0-p.x1,0),dy=Math.max(p.y0-q.y1,q.y0-p.y1,0);
     minWeb=Math.min(minWeb,Math.hypot(dx,dy));
   }
-  return {pieces,sponges,fills,slotsFront,slotsBack,doors,doorSlots,ports,frame,fasteners,sockets,socketL,joints,vents,minWeb,errors,warnings,ch};
+  return {pieces,sponges,fills,slotsFront,slotsBack,doors,doorSlots,ports,frame,fasteners,sockets,socketL,joints,sensorBoxes,vents,minWeb,errors,warnings,ch};
 }
 
 export function framePieces(W,H,B,cuts,w){

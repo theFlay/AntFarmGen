@@ -16,7 +16,7 @@ function buildForm(){
   const root=document.getElementById('controls');
   let html='';
   for(const [name,open,fields] of PARAMS){
-    html+=`<div class="card"><details${open?' open':''}><summary>${name}</summary>`;
+    html+=`<div class="group"><details${open?' open':''}><summary>${name}</summary>`;
     for(const f of fields){
       let input;
       if(f.opts) input=`<select id="p_${f.k}">${f.opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
@@ -60,7 +60,9 @@ const TOOLHELP={
   merge:'Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it.',
   join:'Tap a cell, then a touching cell, to join their chambers. Tap the same cell twice to split it.',
   diag:'Tap a cell to cycle no diagonal, / and \\. Each half joins a neighbouring chamber. Needs Angled shapes on.',
-  jog:'Tap a solid wall to step it sideways one way, then the other, then back. Needs Angled shapes on.'
+  jog:'Tap a solid wall to step it sideways one way, then the other, then back. Needs Angled shapes on.',
+  sensor:'Tap a cell to add or remove a sensor pocket. It sits in a corner with two solid walls.',
+  pillar:'Tap a cell to add or remove a support pillar.'
 };
 function snapshot(p=P){history.push(JSON.stringify({L,P:p}));if(history.length>60)history.shift();}
 function regenerate(prev=P){if(L)snapshot(prev);G=derive(P);L=generate(G,P);}
@@ -92,11 +94,15 @@ function render(){
     ['Wall sheets',`${ex.stripSheets} at ${P.stockW} x ${P.stockH}`],['Frame',`${geo.frame.length} pieces x ${P.layers} layers`],
     ['Ports that always line up',lineUp()],['Doors',`${geo.doors.length} (${geo.doors.filter(d=>d.closed).length} start closed)`],['Fasteners',`${geo.fasteners.length} ${P.fastener==='peg'?'pegs and keys':P.fastener==='bolt'?'bolts':''}`],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
   ];
-  document.getElementById('stats').innerHTML=st.map(([a,b])=>`<div><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
+  document.getElementById('stats').innerHTML=st.map(([a,b])=>`<div${a.startsWith('Ports that')?' class="wide"':''}><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
   document.getElementById('derived').textContent=`Pitch target ${f1(G.pitch)}mm, actual cells ${f1(G.cellW)} x ${f1(G.cellH)}mm, tunnels ${f1(G.tunnelW)}mm wide, depth ${f1(G.depth)}mm.${G.adjusted?' Cell count nudged so ports miss the walls.':''}`;
   const exDiv=document.getElementById('exports');
-  exDiv.innerHTML=ex.files.map((f,i)=>`<button data-file="${i}"${rules.ok?'':' disabled'}>${f.name}</button>`).join('')+
-    `<button id="zipAll" class="primary"${rules.ok?'':' disabled'}>All as .zip</button>`;
+  exDiv.innerHTML=`<button id="zipAll" class="primary"${rules.ok?'':' disabled'}>Download everything (.zip)</button>`+
+    ex.files.map((f,i)=>`<button data-file="${i}"${rules.ok?'':' disabled'}>${f.name}</button>`).join('');
+  const errs=rules.msgs.filter(m=>m[0]==='error').length,warns=rules.msgs.filter(m=>m[0]==='warn').length;
+  const pill=document.getElementById('pill');
+  pill.className='pill '+(errs?'bad':warns?'warn':'good');
+  pill.textContent=errs?`${errs} problem${errs>1?'s':''} to fix`:warns?`Ready, ${warns} warning${warns>1?'s':''}`:'Ready to export';
   exDiv._files=ex.files;
   if(!rules.ok)setStatus('Fix the errors in Checks to enable export.');
   else setStatus('');
@@ -134,6 +140,13 @@ function onPreviewClick(ev){
     const ch=chambers(L),cham=ch.list[ch.of(r,c,half)];
     const on=!cham.active;
     for(const u of cham.cells)setActive(L,u,on);
+    render();return;
+  }
+  if(tool==='sensor'||tool==='pillar'){
+    const list=tool==='sensor'?L.sensors:L.pillars;
+    snapshot();
+    const i=list.findIndex(u=>u[0]===r&&u[1]===c);
+    if(i>=0)list.splice(i,1);else list.push([r,c]);
     render();return;
   }
   if(tool==='diag'){

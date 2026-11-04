@@ -56,7 +56,7 @@ export function exporters(G,L,P,geo){
     const b=[];
     b.push(d.outline(rectPts(0,0,W,H)));
     for(const s of slots)b.push(d.rect(s));
-    if(G.service===side)for(const s of geo.doorSlots)b.push(d.rect(s));
+    if(G.service===side)for(const s of [...geo.doorSlots,...geo.sensorBoxes])b.push(d.rect(s));
     b.push(...fastenerCuts(G,P,geo,d));
     b.push(...socketCuts(G,geo,d,sockTab));
     if(vents)for(const v of geo.vents)b.push(d.hole(v.x,v.y,P.ventD));
