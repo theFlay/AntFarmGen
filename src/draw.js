@@ -22,7 +22,7 @@ export function drawTopdown(G,L,P,geo,rules,opts){
   }
   for(const pc of geo.pieces){
     const r=pc.rect;
-    o.push(`<rect x="${fmt(r.x0)}" y="${fmt(r.y0)}" width="${fmt(r.x1-r.x0)}" height="${fmt(r.y1-r.y0)}" fill="${pc.kind==='wall'?'#5b4fc4':'#3c6fb0'}"/>`);
+    o.push(`<rect x="${fmt(r.x0)}" y="${fmt(r.y0)}" width="${fmt(r.x1-r.x0)}" height="${fmt(r.y1-r.y0)}" fill="${pc.kind==='wall'?'#5b4fc4':pc.kind==='lip'?'#8f86d8':'#3c6fb0'}"/>`);
   }
   // tunnel openings
   const tw=G.tunnelW;
@@ -40,7 +40,22 @@ export function drawTopdown(G,L,P,geo,rules,opts){
     o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="${p.active?'#2fb37a':'#9aa3a5'}"/>`);
     if(opts.labels)o.push(`<text x="${fmt(horiz?p.pos:(p.side==='left'?-2:W+2))}" y="${fmt(horiz?(p.side==='top'?-1:H+3.5):p.pos)}" font-size="3" text-anchor="${horiz?'middle':(p.side==='left'?'end':'start')}" fill="#333">${p.id}</text>`);
   }
-  for(const b of geo.bolts)o.push(`<circle cx="${fmt(b.x)}" cy="${fmt(b.y)}" r="${fmt(P.boltD/2)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);
+  for(const b of geo.fasteners){
+    if(P.fastener==='bolt'){o.push(`<circle cx="${fmt(b.x)}" cy="${fmt(b.y)}" r="${fmt(P.boltD/2)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);continue;}
+    const hx=(b.along==='x'?P.pegW:t)/2,hy=(b.along==='x'?t:P.pegW)/2;
+    o.push(`<rect x="${fmt(b.x-hx)}" y="${fmt(b.y-hy)}" width="${fmt(2*hx)}" height="${fmt(2*hy)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);
+  }
+  for(const s of geo.sockets){
+    const hl=(geo.socketL-4)/2,hx=s.along==='x'?hl:t/2,hy=s.along==='x'?t/2:hl;
+    o.push(`<rect x="${fmt(s.x-hx)}" y="${fmt(s.y-hy)}" width="${fmt(2*hx)}" height="${fmt(2*hy)}" fill="#f3b0b2" stroke="#b33" stroke-width="0.3"/>`);
+  }
+  // closed doors
+  for(const d of geo.doors){
+    if(!d.closed)continue;
+    const w2=G.tunnelW/2+0.8,h2=t/2+0.8;
+    const r=d.orient==='H'?[d.x-w2,d.y-h2,2*w2,2*h2]:[d.x-h2,d.y-w2,2*h2,2*w2];
+    o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="#e8933a"/>`);
+  }
   for(const v of geo.vents)o.push(`<circle cx="${fmt(v.x)}" cy="${fmt(v.y)}" r="${fmt(Math.max(0.35,P.ventD/2))}" fill="#9b8a63"/>`);
   for(const f of geo.fills)o.push(`<circle cx="${fmt(f.x)}" cy="${fmt(f.y)}" r="${fmt(P.fillD/2)}" fill="none" stroke="#fff" stroke-width="0.6"/>`);
   // problems

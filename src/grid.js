@@ -30,5 +30,6 @@ export function derive(P){
   const xs=[],ys=[];
   for(let i=0;i<=cols;i++) xs.push(P.B+i*cellW);
   for(let j=0;j<=rows;j++) ys.push(P.B+j*cellH);
-  return {t,depth,pitch,tunnelW,tunnelH,innerW,innerH,cols,rows,cellW,cellH,xs,ys,adjusted};
+  const service=P.orient==='upright'?'back':'front';
+  return {t,depth,pitch,tunnelW,tunnelH,innerW,innerH,cols,rows,cellW,cellH,xs,ys,adjusted,service};
 }

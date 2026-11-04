@@ -41,7 +41,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <body>
 <header>
   <h1>Ant nest panel generator</h1>
-  <div class="sub">v1: acrylic strip-wall nest panels for a CO2 laser. Wang-tile layout, shared walls, tab-and-slot assembly.</div>
+  <div class="sub">All-acrylic nest panels for a CO2 laser. Shared walls, tab-and-slot assembly, a door on every tunnel.</div>
 </header>
 <div class="wrap">
   <aside id="controls"></aside>
@@ -50,7 +50,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <div class="row tools" id="tools">
         <span>Edit:</span>
         <button data-tool="wall" class="on">Walls</button>
-        <button data-tool="cell">Chambers on/off</button>
+        <button data-tool="cell">Starting area</button>
         <button data-tool="merge">Brood 2x2</button>
         <button id="undo">Undo</button>
         <span style="flex:1"></span>
@@ -61,7 +61,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <div id="preview"></div>
       <div class="legend">
         <span><i class="sw" style="background:#e9d5a6"></i>Chamber</span>
-        <span><i class="sw" style="background:#8a8a86"></i>Inactive (sealed)</span>
+        <span><i class="sw" style="background:#8a8a86"></i>Behind closed doors</span>
+        <span><i class="sw" style="background:#e8933a"></i>Closed door</span>
         <span><i class="sw" style="background:#5b4fc4"></i>Wall strip</span>
         <span><i class="sw" style="background:#2fb37a"></i>Tunnel</span>
         <span><i class="sw" style="background:#4a90d9"></i>Sponge pocket</span>
@@ -75,6 +76,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <div class="msg info">Red = cut, black = engrave (change below). Kerf is already applied. Every file is drawn at 1:1 in millimetres.</div>
       <div class="row" id="exports" style="margin-top:6px"></div>
       <div class="row" style="margin-top:8px">
+        <button id="testPiece">Fit test piece (.svg)</button>
         <button id="saveLayout">Save layout (.json)</button>
         <button id="loadBtn">Load layout</button>
         <input type="file" id="loadLayout" accept=".json,application/json" hidden>
@@ -92,6 +94,12 @@ button:disabled{opacity:.45;cursor:not-allowed}
       { k: "H", l: "Panel height (mm)", d: 200 },
       { k: "B", l: "Border (mm)", d: 15, h: "Fixed width. Port adaptors and bolts sit here." }
     ]],
+    ["Build", true, [
+      { k: "orient", l: "Nest orientation", d: "flat", opts: [["flat", "Flat (table)"], ["upright", "Upright (shelf)"]], h: "Flat: viewed from the top. Upright: viewed from both faces. Doors and fill holes go on the top sheet (flat) or back sheet (upright)." },
+      { k: "doorType", l: "Door type", d: "slide", opts: [["slide", "A: sliding door"], ["none", "None (open tunnels)"]] },
+      { k: "fastener", l: "Hold together with", d: "peg", opts: [["peg", "Acrylic pegs and keys"], ["bolt", "Bolts"], ["cement", "Cement only"]] },
+      { k: "coverType", l: "Red cover", d: "whole", opts: [["whole", "Whole panel"], ["none", "None"]] }
+    ]],
     ["Ants", true, [
       { k: "sizeFor", l: "Size for", d: "both", opts: [["workers", "Workers"], ["queens", "Queens"], ["both", "Both"]], h: "Chambers follow worker length (queen length if Queens). Tunnels follow queen width when given." },
       { k: "workerLen", l: "Worker length (mm)", d: 13 },
@@ -108,35 +116,40 @@ button:disabled{opacity:.45;cursor:not-allowed}
       { k: "tabL", l: "Tab length (mm)", d: 8 },
       { k: "tabPitch", l: "Tab spacing (mm)", d: 35 },
       { k: "kerf", l: "Kerf (mm)", d: 0.15, step: 0.01, h: "Measure from a test cut." },
-      { k: "slotClear", l: "Slot clearance (mm)", d: 0, step: 0.01, h: "Added to slot size. Negative = tighter fit." }
+      { k: "slotClear", l: "Slot clearance (mm)", d: 0, step: 0.01, h: "Added to slot size. Negative = tighter fit." },
+      { k: "doorFit", l: "Door fit per side (mm)", d: 0.1, step: 0.01, h: "Gap each side of a door. Tune with the test piece." },
+      { k: "doorGrip", l: "Door head height (mm)", d: 4, step: 0.5 },
+      { k: "lipH", l: "Sand lip height, upright (mm)", d: 4, step: 0.5, h: "Small lips each side of floor tunnels. 0 = none." },
+      { k: "pegW", l: "Peg width (mm)", d: 7, step: 0.5 },
+      { k: "coverStand", l: "Cover gap (mm)", d: null, opt: true, h: "Blank = clears open doors." }
     ]],
     ["Ports and bolts", false, [
       { k: "portPitch", l: "Port spacing (mm)", d: 100 },
       { k: "portOffset", l: "Port offset from corner (mm)", d: 50 },
-      { k: "boltD", l: "Bolt hole diameter (mm)", d: 3.4, step: 0.1 },
-      { k: "boltSpacing", l: "Max bolt spacing (mm)", d: 60 }
+      { k: "boltD", l: "Bolt hole diameter (mm)", d: 3.4, step: 0.1, h: "Only used with bolts." },
+      { k: "boltSpacing", l: "Max peg or bolt spacing (mm)", d: 60 }
     ]],
     ["Sponges and vents", false, [
       { k: "spongeD", l: "Sponge pocket width (mm)", d: 6 },
       { k: "spongeLen", l: "Sponge pocket length (mm)", d: 24 },
       { k: "slotW", l: "Sponge vent slot width (mm)", d: 1.2, step: 0.1, h: "Narrower than the smallest ant head." },
       { k: "fillD", l: "Fill hole diameter (mm)", d: 3, step: 0.1 },
-      { k: "fillSide", l: "Syringe top-up from", d: "front", opts: [["front", "Front"], ["back", "Back"], ["both", "Both"]] },
+      { k: "fillSide", l: "Syringe top-up from", d: "service", opts: [["service", "Service side"], ["front", "Front"], ["back", "Back"], ["both", "Both"]] },
       { k: "ventD", l: "Air vent hole diameter (mm)", d: 1, step: 0.1 },
       { k: "ventGrid", l: "Air vents per chamber (n x n)", d: 3, step: 1 }
     ]],
     ["Auto layout", true, [
       { k: "seed", l: "Seed", d: 1234, step: 1 },
       { k: "brood", l: "Brood chambers (2x2)", d: 1, step: 1 },
-      { k: "activeCount", l: "Active chambers (0 = all)", d: 0, step: 1, h: "Unused cells stay sealed. Start small and grow." },
-      { k: "growFrom", l: "Grow active area from", d: "left", opts: [["left", "Left"], ["right", "Right"], ["top", "Top"], ["bottom", "Bottom"], ["center", "Centre"]] },
+      { k: "activeCount", l: "Chambers open at the start (0 = all)", d: 0, step: 1, h: "Everything is cut either way. The rest start behind closed doors." },
+      { k: "growFrom", l: "Starting area grows from", d: "left", opts: [["left", "Left"], ["right", "Right"], ["top", "Top"], ["bottom", "Bottom"], ["center", "Centre"]] },
       { k: "loops", l: "Extra loop tunnels (0 to 1)", d: 0.15, step: 0.05 },
       { k: "sponges", l: "Sponges", d: 3, step: 1 },
       { k: "dampSide", l: "Damp side", d: "left", opts: [["left", "Left"], ["right", "Right"], ["top", "Top"], ["bottom", "Bottom"], ["none", "None (spread)"]] }
     ]],
     ["Export", false, [
-      { k: "stockW", l: "Strip stock sheet width (mm)", d: 600 },
-      { k: "stockH", l: "Strip stock sheet height (mm)", d: 400 },
+      { k: "stockW", l: "Wall sheet stock width (mm)", d: 600 },
+      { k: "stockH", l: "Wall sheet stock height (mm)", d: 400 },
       { k: "cutColor", l: "Cut line colour", d: "#ff0000", color: true },
       { k: "engraveColor", l: "Engrave colour", d: "#000000", color: true },
       { k: "engraveIds", l: "Engrave part IDs", d: true, bool: true }
@@ -203,7 +216,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
     const xs = [], ys = [];
     for (let i = 0; i <= cols; i++) xs.push(P2.B + i * cellW);
     for (let j = 0; j <= rows; j++) ys.push(P2.B + j * cellH);
-    return { t, depth, pitch, tunnelW, tunnelH, innerW, innerH, cols, rows, cellW, cellH, xs, ys, adjusted };
+    const service = P2.orient === "upright" ? "back" : "front";
+    return { t, depth, pitch, tunnelW, tunnelH, innerW, innerH, cols, rows, cellW, cellH, xs, ys, adjusted, service };
   }
 
   // src/layout.js
@@ -296,79 +310,32 @@ button:disabled{opacity:.45;cursor:not-allowed}
       }
     }
     const ch = chambers(L2), adj = adjacency(L2, ch);
-    const total = ch.list.length, ac = Math.round(P2.activeCount || 0);
-    const tgt = { left: [P2.B, P2.H / 2], right: [P2.W - P2.B, P2.H / 2], top: [P2.W / 2, P2.B], bottom: [P2.W / 2, P2.H - P2.B], center: [P2.W / 2, P2.H / 2] }[P2.growFrom] || [P2.W / 2, P2.H / 2];
-    const portCh = new Set(portCells(G2, P2).map((p) => ch.id[p.cell[0]][p.cell[1]]));
-    function growRegion() {
-      if (!(ac > 0 && ac < total)) return new Set(ch.list.map((c) => c.id));
-      let best = null, bd = 1e18;
-      for (const c of ch.list) {
-        if (P2.growFrom !== "center" && portCh.size && !portCh.has(c.id)) continue;
-        const [x, y] = chamberCenter(G2, c);
-        const d = (x - tgt[0]) ** 2 + (y - tgt[1]) ** 2;
-        if (d < bd) {
-          bd = d;
-          best = c.id;
+    const ids = ch.list.map((c) => c.id);
+    let deg = /* @__PURE__ */ new Map(), done = false;
+    for (let attempt = 0; attempt < 60 && !done; attempt++) {
+      const cap = attempt >= 50 ? 99 : 3;
+      for (let j = 0; j <= G2.rows; j++) L2.H[j].fill("solid");
+      for (let r = 0; r < G2.rows; r++) L2.V[r].fill("solid");
+      deg = new Map(ids.map((i) => [i, 0]));
+      const inT = /* @__PURE__ */ new Set([pick(ids)]);
+      while (inT.size < ids.length) {
+        const cand = [];
+        for (const a2 of inT) {
+          if (deg.get(a2) >= cap) continue;
+          for (const [b2, es2] of adj.get(a2)) if (!inT.has(b2) && deg.get(b2) < cap) cand.push([a2, b2, es2]);
         }
+        if (!cand.length) break;
+        const [a, b, es] = pick(cand);
+        setEdge(L2, pick(es), "tunnel");
+        deg.set(a, deg.get(a) + 1);
+        deg.set(b, deg.get(b) + 1);
+        inT.add(b);
       }
-      const set = /* @__PURE__ */ new Set([best]);
-      while (set.size < ac) {
-        const front = [];
-        for (const a of set) for (const b of adj.get(a).keys()) if (!set.has(b)) front.push(b);
-        if (!front.length) break;
-        set.add(pick(front));
-      }
-      if (portCh.size && ![...set].some((id) => portCh.has(id))) {
-        const prev = /* @__PURE__ */ new Map(), q = [...set];
-        for (const a of q) prev.set(a, null);
-        let hit = null;
-        while (q.length && hit === null) {
-          const a = q.shift();
-          for (const b of adj.get(a).keys()) if (!prev.has(b)) {
-            prev.set(b, a);
-            if (portCh.has(b)) {
-              hit = b;
-              break;
-            }
-            q.push(b);
-          }
-        }
-        for (let x = hit; x !== null && x !== void 0 && !set.has(x); x = prev.get(x)) set.add(x);
-      }
-      return set;
+      if (inT.size === ids.length) done = true;
     }
-    let activeSet, ids, deg = /* @__PURE__ */ new Map(), done = false;
-    for (let region = 0; region < 40 && !done; region++) {
-      activeSet = growRegion();
-      ids = [...activeSet];
-      const last = region === 39;
-      for (let attempt = 0; attempt < (last ? 30 : 15) && !done; attempt++) {
-        const cap = last && attempt >= 20 ? 99 : 3;
-        for (let j = 0; j <= G2.rows; j++) L2.H[j].fill("solid");
-        for (let r = 0; r < G2.rows; r++) L2.V[r].fill("solid");
-        deg = new Map(ids.map((i) => [i, 0]));
-        const inT = /* @__PURE__ */ new Set([pick(ids)]);
-        while (inT.size < ids.length) {
-          const cand = [];
-          for (const a2 of inT) {
-            if (deg.get(a2) >= cap) continue;
-            for (const [b2, es2] of adj.get(a2)) if (activeSet.has(b2) && !inT.has(b2) && deg.get(b2) < cap) cand.push([a2, b2, es2]);
-          }
-          if (!cand.length) break;
-          const [a, b, es] = pick(cand);
-          setEdge(L2, pick(es), "tunnel");
-          deg.set(a, deg.get(a) + 1);
-          deg.set(b, deg.get(b) + 1);
-          inT.add(b);
-        }
-        if (inT.size === ids.length) done = true;
-      }
-    }
-    for (let r = 0; r < G2.rows; r++) L2.active[r].fill(true);
-    for (const c of ch.list) if (!activeSet.has(c.id)) for (const [r, cc] of c.cells) L2.active[r][cc] = false;
     const extra = Math.round(Math.max(0, P2.loops || 0) * ids.length);
     const pairs = [];
-    for (const a of ids) for (const [b, es] of adj.get(a)) if (a < b && activeSet.has(b)) pairs.push([a, b, es]);
+    for (const a of ids) for (const [b, es] of adj.get(a)) if (a < b) pairs.push([a, b, es]);
     shuffle(pairs, rnd);
     let added = 0;
     for (const [a, b, es] of pairs) {
@@ -380,39 +347,105 @@ button:disabled{opacity:.45;cursor:not-allowed}
       deg.set(b, deg.get(b) + 1);
       added++;
     }
-    const nS = Math.max(0, Math.round(P2.sponges || 0));
-    if (nS > 0) {
-      const cand = [];
-      for (const e of interiorEdges(L2, ch)) {
-        if (!activeSet.has(e.a) || !activeSet.has(e.b)) continue;
-        if (getEdge(L2, e) !== "solid") continue;
-        const len = e.type === "H" ? G2.cellW : G2.cellH;
-        if (spongeLength(P2, G2, len) < 8) continue;
-        let mx, my;
-        if (e.type === "H") {
-          mx = (G2.xs[e.k] + G2.xs[e.k + 1]) / 2;
-          my = G2.ys[e.j];
-        } else {
-          mx = G2.xs[e.i];
-          my = (G2.ys[e.r] + G2.ys[e.r + 1]) / 2;
-        }
-        const u = (mx - P2.B) / G2.innerW, v = (my - P2.B) / G2.innerH;
-        const base = { left: 1 - u, right: u, top: 1 - v, bottom: v, none: 0.5 }[P2.dampSide] ?? 0.5;
-        cand.push({ e, score: base + rnd() * (P2.dampSide === "none" ? 1 : 0.25) });
+    const start = startArea(G2, P2, L2, ch, rnd, pick);
+    for (let r = 0; r < G2.rows; r++) L2.active[r].fill(true);
+    for (const c of ch.list) if (!start.has(c.id)) for (const [r, cc] of c.cells) L2.active[r][cc] = false;
+    placeSponges(G2, P2, L2, ch, start, rnd);
+    return L2;
+  }
+  function tunnelGraph(L2, ch) {
+    const g = new Map(ch.list.map((c) => [c.id, /* @__PURE__ */ new Set()]));
+    for (const e of interiorEdges(L2, ch)) if (getEdge(L2, e) === "tunnel") {
+      g.get(e.a).add(e.b);
+      g.get(e.b).add(e.a);
+    }
+    return g;
+  }
+  function pathTo(g, set, targets) {
+    const prev = /* @__PURE__ */ new Map(), q = [...set];
+    for (const a of q) prev.set(a, null);
+    while (q.length) {
+      const a = q.shift();
+      if (targets.has(a)) {
+        const out = [];
+        for (let x = a; x !== null && !set.has(x); x = prev.get(x)) out.push(x);
+        return out;
       }
-      cand.sort((x, y) => y.score - x.score);
-      const sc = /* @__PURE__ */ new Map();
-      let placed = 0;
-      for (const { e } of cand) {
-        if (placed >= nS) break;
-        if ((sc.get(e.a) || 0) >= 2 || (sc.get(e.b) || 0) >= 2) continue;
-        setEdge(L2, e, "sponge");
-        sc.set(e.a, (sc.get(e.a) || 0) + 1);
-        sc.set(e.b, (sc.get(e.b) || 0) + 1);
-        placed++;
+      for (const b of g.get(a)) if (!prev.has(b)) {
+        prev.set(b, a);
+        q.push(b);
       }
     }
-    return L2;
+    return null;
+  }
+  function startArea(G2, P2, L2, ch, rnd, pick) {
+    const total = ch.list.length, ac = Math.round(P2.activeCount || 0);
+    if (!(ac > 0 && ac < total)) return new Set(ch.list.map((c) => c.id));
+    const g = tunnelGraph(L2, ch);
+    const tgt = { left: [P2.B, P2.H / 2], right: [P2.W - P2.B, P2.H / 2], top: [P2.W / 2, P2.B], bottom: [P2.W / 2, P2.H - P2.B], center: [P2.W / 2, P2.H / 2] }[P2.growFrom] || [P2.W / 2, P2.H / 2];
+    const dist = (c) => {
+      const [x, y] = chamberCenter(G2, c);
+      return (x - tgt[0]) ** 2 + (y - tgt[1]) ** 2;
+    };
+    const portCh = new Set(portCells(G2, P2).map((p) => ch.id[p.cell[0]][p.cell[1]]));
+    const pool = P2.growFrom !== "center" && portCh.size ? ch.list.filter((c) => portCh.has(c.id)) : ch.list;
+    const seed = pool.slice().sort((a, b) => dist(a) - dist(b))[0];
+    const set = /* @__PURE__ */ new Set([seed.id]);
+    const addPath = (t) => {
+      const p = pathTo(g, set, t);
+      if (p) for (const x of p) set.add(x);
+    };
+    if (portCh.size && !portCh.has(seed.id)) addPath(portCh);
+    const brood = ch.list.filter((c) => c.merged).sort((a, b) => dist(a) - dist(b));
+    brood.forEach((b, i) => {
+      if (set.has(b.id)) return;
+      const p = pathTo(g, set, /* @__PURE__ */ new Set([b.id]));
+      if (p && (i === 0 || set.size + p.length <= ac)) for (const x of p) set.add(x);
+    });
+    while (set.size < ac) {
+      const front = [];
+      for (const a of set) for (const b of g.get(a)) if (!set.has(b)) front.push(b);
+      if (!front.length) break;
+      set.add(pick(front));
+    }
+    return set;
+  }
+  function placeSponges(G2, P2, L2, ch, start, rnd) {
+    const nS = Math.max(0, Math.round(P2.sponges || 0));
+    if (nS <= 0 || spongeLength(P2, G2) < 8) return;
+    const cand = [];
+    for (const e of interiorEdges(L2, ch)) {
+      if (getEdge(L2, e) !== "solid") continue;
+      let mx, my;
+      if (e.type === "H") {
+        mx = (G2.xs[e.k] + G2.xs[e.k + 1]) / 2;
+        my = G2.ys[e.j];
+      } else {
+        mx = G2.xs[e.i];
+        my = (G2.ys[e.r] + G2.ys[e.r + 1]) / 2;
+      }
+      const u = (mx - P2.B) / G2.innerW, v = (my - P2.B) / G2.innerH;
+      const base = { left: 1 - u, right: u, top: 1 - v, bottom: v, none: 0.5 }[P2.dampSide] ?? 0.5;
+      const inStart = (start.has(e.a) ? 1 : 0) + (start.has(e.b) ? 1 : 0);
+      cand.push({ e, inStart, score: base + rnd() * (P2.dampSide === "none" ? 1 : 0.25) });
+    }
+    cand.sort((x, y) => y.score - x.score);
+    const sc = /* @__PURE__ */ new Map();
+    let placed = 0;
+    const put = (e) => {
+      setEdge(L2, e, "sponge");
+      sc.set(e.a, (sc.get(e.a) || 0) + 1);
+      sc.set(e.b, (sc.get(e.b) || 0) + 1);
+      placed++;
+    };
+    const first = cand.find((c) => c.inStart === 2) || cand.find((c) => c.inStart === 1);
+    if (first) put(first.e);
+    for (const { e } of cand) {
+      if (placed >= nS) break;
+      if (getEdge(L2, e) !== "solid") continue;
+      if ((sc.get(e.a) || 0) >= 2 || (sc.get(e.b) || 0) >= 2) continue;
+      put(e);
+    }
   }
   function portCells(G2, P2) {
     const out = [], clear = G2.t / 2 + G2.tunnelW / 2 + 0.5;
@@ -429,11 +462,99 @@ button:disabled{opacity:.45;cursor:not-allowed}
     }
     return out;
   }
-  function spongeLength(P2, G2, edgeLen) {
-    return Math.min(P2.spongeLen, edgeLen - P2.spongeD - 4 * G2.t - 1);
+  function spongeLength(P2, G2) {
+    return Math.min(P2.spongeLen, Math.min(G2.cellW, G2.cellH) - P2.spongeD - 4 * G2.t - 1);
   }
 
+  // src/doors.js
+  function slideSizes(G2, P2) {
+    const fit = P2.doorFit, w = G2.tunnelW, t = G2.t, S = P2.S;
+    const ear = 2, headH = Math.max(3, P2.doorGrip), wall = 2.5, bar = 2;
+    const bodyW = w - 2 * fit, bodyH = G2.tunnelH + S;
+    const headW = bodyW + 2 * ear;
+    const pullW = t + 0.2, pullH = 2.1;
+    const saddleW = headW + 2 * fit + 2 * wall;
+    const saddleH = G2.tunnelH + headH + 0.2 + bar;
+    return {
+      fit,
+      bodyW,
+      bodyH,
+      headW,
+      headH,
+      pullW,
+      pullH,
+      saddleW,
+      saddleH,
+      bar,
+      wall,
+      stickClosed: headH,
+      stickOpen: saddleH
+    };
+  }
+  function doorPart(z) {
+    const { bodyW, bodyH, headW, headH, pullW, pullH } = z;
+    const e = (headW - bodyW) / 2, cx = headW / 2, hy = (headH - pullH) / 2;
+    return {
+      name: "door",
+      w: headW,
+      h: headH + bodyH,
+      poly: [[0, 0], [headW, 0], [headW, headH], [headW - e, headH], [headW - e, headH + bodyH], [e, headH + bodyH], [e, headH], [0, headH]],
+      holes: [[[cx - pullW / 2, hy], [cx + pullW / 2, hy], [cx + pullW / 2, hy + pullH], [cx - pullW / 2, hy + pullH]]]
+    };
+  }
+  function saddlePart(z, G2) {
+    const { saddleW: W, saddleH: H, wall, bar, headW, headH, bodyW, fit } = z;
+    const hw = headW / 2 + fit, bw = bodyW / 2 + fit, c = W / 2, ledge = bar + headH + 0.2;
+    return {
+      name: "saddle",
+      w: W,
+      h: H,
+      poly: [[0, 0], [W, 0], [W, H], [c + bw, H], [c + bw, ledge], [c + hw, ledge], [c + hw, bar], [c - hw, bar], [c - hw, ledge], [c - bw, ledge], [c - bw, H], [0, H]],
+      holes: []
+    };
+  }
+  var DOOR_TYPES = {
+    none: { label: "None (open tunnels)", sizes: () => null, slot: () => null, parts: () => [] },
+    slide: {
+      label: "A: sliding door and saddle",
+      sizes: slideSizes,
+      // the slot runs along the wall directly over the notch
+      slot(d, G2, P2) {
+        const hl = G2.tunnelW / 2, ht = G2.t / 2 + P2.doorFit;
+        return d.orient === "H" ? { x0: d.x - hl, x1: d.x + hl, y0: d.y - ht, y1: d.y + ht } : { x0: d.x - ht, x1: d.x + ht, y0: d.y - hl, y1: d.y + hl };
+      },
+      parts(G2, P2, n) {
+        const z = slideSizes(G2, P2);
+        return [Object.assign(doorPart(z), { qty: n }), Object.assign(saddlePart(z, G2), { qty: n })];
+      }
+    }
+  };
+  var doorType = (P2) => DOOR_TYPES[P2.doorType] || DOOR_TYPES.none;
+
   // src/geometry.js
+  function tabPositions(len, notches, G2, P2) {
+    const m = G2.t + 1, tl = P2.tabL, clear = G2.tunnelW / 2 + 3;
+    const ivs = [];
+    let a = m;
+    for (const n of notches.slice().sort((x, y) => x - y)) {
+      ivs.push([a, n - clear]);
+      a = n + clear;
+    }
+    ivs.push([a, len - m]);
+    const out = [];
+    ivs.forEach(([a2, b], i) => {
+      const span = b - a2;
+      if (span < tl - 1e-9) return;
+      const n = Math.max(1, Math.min(Math.round(span / Math.max(10, P2.tabPitch)), Math.floor(span / (tl + 4))));
+      if (n > 1) {
+        for (let q = 0; q < n; q++) out.push(a2 + tl / 2 + (span - tl) * q / (n - 1));
+        return;
+      }
+      const first = i === 0, last = i === ivs.length - 1;
+      out.push(first && !last ? a2 + tl / 2 : last && !first ? b - tl / 2 : (a2 + b) / 2);
+    });
+    return out;
+  }
   function buildGeometry(G2, L2, P2) {
     const { t, depth, xs, ys, cols, rows, cellW, cellH, tunnelW, tunnelH } = G2;
     const B = P2.B, W = P2.W, H = P2.H, D = P2.spongeD;
@@ -476,13 +597,13 @@ button:disabled{opacity:.45;cursor:not-allowed}
       const pt = orient === "H" ? [uc, c] : [c, uc];
       fills.push({ x: pt[0], y: pt[1], id });
     }
-    function runPieces(orient, line, c, a, b, s, e, segState, segCenter, cellLen) {
+    function runPieces(orient, line, c, a, b, s, e, segState, segCenter) {
       let cur = { s, notches: [] };
       for (let q = a; q < b; q++) {
         const st = segState(q), uc = segCenter(q);
         if (st === "tunnel") cur.notches.push(uc);
         if (st === "sponge") {
-          const Ls = spongeLength(P2, G2, cellLen);
+          const Ls = spongeLength(P2, G2);
           if (Ls < 8) {
             errors.push(`Sponge on ${orient}${line} does not fit: cells too small for a ${P2.spongeLen}mm pocket.`);
             continue;
@@ -505,7 +626,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
         while (k < cols && present(hS(j, k))) k++;
         const b = k;
         const s = a === 0 ? B : xs[a] - t / 2, e = b === cols ? W - B : xs[b] + t / 2;
-        runPieces("H", j, ys[j], a, b, s, e, (q) => hS(j, q), (q) => (xs[q] + xs[q + 1]) / 2, cellW);
+        runPieces("H", j, ys[j], a, b, s, e, (q) => hS(j, q), (q) => (xs[q] + xs[q + 1]) / 2);
       }
     }
     const covered = (j, i) => j >= 1 && j < rows && (present(hS(j, i - 1)) || present(hS(j, i)));
@@ -522,29 +643,44 @@ button:disabled{opacity:.45;cursor:not-allowed}
         const b = r;
         const s = a === 0 ? B : covered(a, i) ? ys[a] + t / 2 : ys[a] - t / 2;
         const e = b === rows ? H - B : covered(b, i) ? ys[b] - t / 2 : ys[b] + t / 2;
-        runPieces("V", i, xs[i], a, b, s, e, (q) => vS(q, i), (q) => (ys[q] + ys[q + 1]) / 2, cellH);
+        runPieces("V", i, xs[i], a, b, s, e, (q) => vS(q, i), (q) => (ys[q] + ys[q + 1]) / 2);
+      }
+    }
+    const ch = chambers(L2);
+    const dt = doorType(P2), doors = [];
+    for (const e of interiorEdges(L2, ch)) {
+      if (getEdge(L2, e) !== "tunnel") continue;
+      const closed = !(ch.list[e.a].active && ch.list[e.b].active);
+      const x = e.type === "H" ? (xs[e.k] + xs[e.k + 1]) / 2 : xs[e.i], y = e.type === "H" ? ys[e.j] : (ys[e.r] + ys[e.r + 1]) / 2;
+      doors.push({ orient: e.type, x, y, closed });
+    }
+    const doorSlots = doors.map((d) => dt.slot(d, G2, P2)).filter(Boolean);
+    if (P2.orient === "upright" && P2.lipH >= 2.5) {
+      const web = 1.5;
+      let n = 0;
+      for (const d of doors) {
+        if (d.orient !== "H") continue;
+        n++;
+        for (const [suf, sgn] of [["a", -1], ["b", 1]]) {
+          const cx = d.x + sgn * (tunnelW / 2 + t / 2);
+          pieces.push({ id: "L" + n + suf, orient: "V", c: cx, s: d.y - t / 2 - P2.lipH, e: d.y - t / 2, notches: [], kind: "lip", windows: [], tabL: P2.lipH - web });
+        }
       }
     }
     const slotsFront = [], slotsBack = [];
     const cl = P2.slotClear;
     for (const pc of pieces) {
-      const len = pc.e - pc.s, m = t + 1;
-      pc.top = [];
-      pc.bot = [];
-      if (len >= P2.tabL + 2 * m) {
-        const n = Math.max(1, Math.round(len / Math.max(10, P2.tabPitch)));
-        const span = len - 2 * m - P2.tabL;
-        for (let q = 0; q < n; q++) pc.top.push(m + P2.tabL / 2 + (n === 1 ? span / 2 : span * q / (n - 1)));
-        const nl = pc.notches.map((x) => x - pc.s);
-        pc.bot = pc.top.filter((u) => nl.every((cx) => Math.abs(u - cx) >= P2.tabL / 2 + tunnelW / 2 + 1));
-      }
+      const len = pc.e - pc.s;
+      pc.top = pc.kind === "lip" ? [pc.tabL / 2] : tabPositions(len, pc.notches.map((x) => x - pc.s), G2, P2);
+      pc.bot = pc.top.slice();
       if (pc.kind === "vent") {
         const pitch = P2.slotW + 2.5, a0 = t + 1.5, a1 = len - (t + 1.5);
         for (let u = a0; u + P2.slotW <= a1 + 1e-9; u += pitch) pc.windows.push([u, u + P2.slotW]);
       }
       const slot = (u) => {
         const g = pc.s + u;
-        return pc.orient === "H" ? { x0: g - P2.tabL / 2 - cl / 2, x1: g + P2.tabL / 2 + cl / 2, y0: pc.c - t / 2 - cl / 2, y1: pc.c + t / 2 + cl / 2 } : { x0: pc.c - t / 2 - cl / 2, x1: pc.c + t / 2 + cl / 2, y0: g - P2.tabL / 2 - cl / 2, y1: g + P2.tabL / 2 + cl / 2 };
+        const tl = (pc.tabL || P2.tabL) / 2;
+        return pc.orient === "H" ? { x0: g - tl - cl / 2, x1: g + tl + cl / 2, y0: pc.c - t / 2 - cl / 2, y1: pc.c + t / 2 + cl / 2 } : { x0: pc.c - t / 2 - cl / 2, x1: pc.c + t / 2 + cl / 2, y0: g - tl - cl / 2, y1: g + tl + cl / 2 };
       };
       for (const u of pc.top) slotsFront.push(Object.assign(slot(u), { id: pc.id }));
       for (const u of pc.bot) slotsBack.push(Object.assign(slot(u), { id: pc.id }));
@@ -552,7 +688,6 @@ button:disabled{opacity:.45;cursor:not-allowed}
     for (const pc of pieces) {
       pc.rect = pc.orient === "H" ? { x0: pc.s, x1: pc.e, y0: pc.c - t / 2, y1: pc.c + t / 2 } : { x0: pc.c - t / 2, x1: pc.c + t / 2, y0: pc.s, y1: pc.e };
     }
-    const ch = chambers(L2);
     const ports = [];
     const w = tunnelW;
     if (P2.portPitch >= 5) {
@@ -597,31 +732,55 @@ button:disabled{opacity:.45;cursor:not-allowed}
       return { side: s, q };
     });
     const frame = framePieces(W, H, B, cuts, w);
+    const fastD = P2.fastener === "peg" ? P2.pegW : P2.boltD;
     const bolts = [];
-    const portNear = (side, pos) => ports.some((p) => p.cut && p.side === side && Math.abs(p.pos - pos) < w / 2 + P2.boltD / 2 + 1.5);
+    const portNear = (side, pos) => ports.some((p) => p.cut && p.side === side && Math.abs(p.pos - pos) < w / 2 + fastD / 2 + 1.5);
     const hb = B / 2;
-    for (const [x, y] of [[hb, hb], [W - hb, hb], [W - hb, H - hb], [hb, H - hb]]) bolts.push({ x, y });
+    for (const [x, y] of [[hb, hb], [W - hb, hb], [W - hb, H - hb], [hb, H - hb]]) bolts.push({ x, y, along: "x" });
     for (const [side, len] of [["top", W], ["bottom", W], ["left", H], ["right", H]]) {
       const span = len - 2 * hb;
       const n = Math.max(1, Math.ceil(span / Math.max(10, P2.boltSpacing)));
       for (let m = 1; m < n; m++) {
         let pos = hb + span * m / n;
         if (portNear(side, pos)) {
-          const alt = [pos - (w / 2 + P2.boltD / 2 + 3), pos + (w / 2 + P2.boltD / 2 + 3)].find((a) => !portNear(side, a));
+          const alt = [pos - (w / 2 + fastD / 2 + 3), pos + (w / 2 + fastD / 2 + 3)].find((a) => !portNear(side, a));
           if (alt === void 0) continue;
           pos = alt;
         }
-        if (side === "top") bolts.push({ x: pos, y: hb });
-        else if (side === "bottom") bolts.push({ x: pos, y: H - hb });
-        else if (side === "left") bolts.push({ x: hb, y: pos });
-        else bolts.push({ x: W - hb, y: pos });
+        if (side === "top") bolts.push({ x: pos, y: hb, along: "x" });
+        else if (side === "bottom") bolts.push({ x: pos, y: H - hb, along: "x" });
+        else if (side === "left") bolts.push({ x: hb, y: pos, along: "y" });
+        else bolts.push({ x: W - hb, y: pos, along: "y" });
       }
     }
-    if (P2.boltD > B - 4) errors.push(`Bolt holes (${P2.boltD}mm) are too big for a ${B}mm border.`);
+    if (P2.fastener === "bolt" && P2.boltD > B - 4) errors.push(`Bolt holes (${P2.boltD}mm) are too big for a ${B}mm border.`);
+    if (P2.fastener === "peg" && t + 2 > B - 4) errors.push(`Peg slots are too wide for a ${B}mm border.`);
+    const fasteners = P2.fastener === "cement" ? [] : bolts;
+    const socketL = 14, sockets = [];
+    if (P2.coverType === "whole") {
+      const free = (side, pos) => {
+        const along = side === "top" || side === "bottom";
+        if (ports.some((p) => p.cut && p.side === side && Math.abs(p.pos - pos) < w / 2 + socketL / 2 + 2)) return false;
+        return !fasteners.some((f) => {
+          const onSide = side === "top" ? f.y === hb : side === "bottom" ? f.y === H - hb : side === "left" ? f.x === hb : f.x === W - hb;
+          return onSide && Math.abs((along ? f.x : f.y) - pos) < fastD / 2 + socketL / 2 + 2;
+        });
+      };
+      for (const [side, len, fr] of [["top", W, [0.25, 0.75]], ["bottom", W, [0.25, 0.75]], ["left", H, [0.5]], ["right", H, [0.5]]]) {
+        for (const f of fr) {
+          for (let dd = 0; dd <= len / 4; dd += 1) {
+            const pos = [len * f + dd, len * f - dd].find((q) => q > socketL && q < len - socketL && free(side, q));
+            if (pos === void 0) continue;
+            sockets.push(side === "top" ? { x: pos, y: hb, along: "x" } : side === "bottom" ? { x: pos, y: H - hb, along: "x" } : side === "left" ? { x: hb, y: pos, along: "y" } : { x: W - hb, y: pos, along: "y" });
+            break;
+          }
+        }
+      }
+      if (sockets.length < 4) warnings.push("Could not find room for all the cover sockets.");
+    }
     const vents = [];
     const vg = Math.max(0, Math.round(P2.ventGrid || 0)), vp = Math.max(P2.ventD * 3, 4);
     if (vg > 0) for (const c of ch.list) {
-      if (!c.active) continue;
       const [cx, cy] = chamberCenter(G2, c);
       for (let a = 0; a < vg; a++) for (let b = 0; b < vg; b++) vents.push({ x: cx + (a - (vg - 1) / 2) * vp, y: cy + (b - (vg - 1) / 2) * vp });
     }
@@ -629,8 +788,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
     if (tunnelH >= depth - 1) errors.push(`Tunnel height ${f1(tunnelH)}mm leaves no bridge above it (depth ${f1(depth)}mm).`);
     if (tunnelW + 4 > Math.min(cellW, cellH) - t) errors.push(`Tunnels (${f1(tunnelW)}mm) are too wide for ${f1(Math.min(cellW, cellH))}mm cells.`);
     if (Math.min(cellW, cellH) < 3 * t + P2.tabL) warnings.push("Cells are very small for this wall thickness and tab length.");
-    const maxLen = Math.max(P2.stockW, P2.stockH) - 10;
-    for (const pc of pieces) if (pc.e - pc.s > maxLen) errors.push(`${pc.id} is ${f1(pc.e - pc.s)}mm long, longer than the strip stock sheet.`);
+    const maxLen = P2.stockW - 10;
+    for (const pc of pieces) if (pc.e - pc.s > maxLen) errors.push(`${pc.id} is ${f1(pc.e - pc.s)}mm long, too long for ${P2.stockW}mm wide stock (strips run along the width).`);
     if (depth + 2 * P2.S + 10 > Math.min(P2.stockW, P2.stockH)) errors.push("Strip stock sheet is too small for one strip.");
     const eps = 1e-6;
     for (const pc of pieces) {
@@ -642,7 +801,19 @@ button:disabled{opacity:.45;cursor:not-allowed}
       const ox = Math.min(p.x1, q.x1) - Math.max(p.x0, q.x0), oy = Math.min(p.y1, q.y1) - Math.max(p.y0, q.y0);
       if (ox > 1e-4 && oy > 1e-4) errors.push(`Geometry: ${pieces[a].id} overlaps ${pieces[b].id}.`);
     }
-    return { pieces, sponges, fills, slotsFront, slotsBack, ports, frame, bolts, vents, errors, warnings, ch };
+    const asRect = (x, y, r) => ({ x0: x - r, x1: x + r, y0: y - r, y1: y + r });
+    const front = (G2.service === "front" ? slotsFront : slotsBack).concat(
+      doorSlots,
+      vents.map((v) => asRect(v.x, v.y, P2.ventD / 2)),
+      fills.map((f) => asRect(f.x, f.y, P2.fillD / 2))
+    );
+    let minWeb = 1e9;
+    for (let a = 0; a < front.length; a++) for (let b = a + 1; b < front.length; b++) {
+      const p = front[a], q = front[b];
+      const dx = Math.max(p.x0 - q.x1, q.x0 - p.x1, 0), dy = Math.max(p.y0 - q.y1, q.y0 - p.y1, 0);
+      minWeb = Math.min(minWeb, Math.hypot(dx, dy));
+    }
+    return { pieces, sponges, fills, slotsFront, slotsBack, doors, doorSlots, ports, frame, fasteners, sockets, socketL, vents, minWeb, errors, warnings, ch };
   }
   function framePieces(W, H, B, cuts, w) {
     const outerPt = (s, q) => [[q, 0], [W, q], [W - q, H], [0, H - q]][s];
@@ -678,7 +849,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
     const bad = /* @__PURE__ */ new Set();
     const ch = geo2.ch;
     const act = ch.list.filter((c) => c.active);
-    if (!act.length) msgs.push(["error", "No active chambers."]);
+    if (!act.length) msgs.push(["error", "No chambers in the starting area."]);
     const edges = interiorEdges(L2, ch);
     const deg = /* @__PURE__ */ new Map(), spc = /* @__PURE__ */ new Map(), adjT = /* @__PURE__ */ new Map();
     for (const c of ch.list) {
@@ -687,7 +858,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       adjT.set(c.id, []);
     }
     const isAct = (id) => ch.list[id].active;
-    let toInactive = 0;
+    let closed = 0, spongesN = 0, startSponge = 0;
     for (const e of edges) {
       const s = getEdge(L2, e);
       if (s === "tunnel") {
@@ -695,33 +866,43 @@ button:disabled{opacity:.45;cursor:not-allowed}
         deg.set(e.b, deg.get(e.b) + 1);
         adjT.get(e.a).push(e.b);
         adjT.get(e.b).push(e.a);
-        if (isAct(e.a) !== isAct(e.b)) {
-          toInactive++;
-          bad.add(isAct(e.a) ? e.a : e.b);
-        }
+        if (!isAct(e.a) || !isAct(e.b)) closed++;
       }
       if (s === "sponge") {
         spc.set(e.a, spc.get(e.a) + 1);
         spc.set(e.b, spc.get(e.b) + 1);
+        spongesN++;
+        if (isAct(e.a) || isAct(e.b)) startSponge++;
       }
     }
-    if (toInactive) msgs.push(["error", `${toInactive} tunnel(s) lead into a sealed chamber.`]);
-    if (act.length > 1) {
-      const seen = /* @__PURE__ */ new Set([act[0].id]), st = [act[0].id];
-      while (st.length) {
-        const a = st.pop();
-        for (const b of adjT.get(a)) if (isAct(b) && !seen.has(b)) {
-          seen.add(b);
-          st.push(b);
+    if (ch.list.length > 1) {
+      const reach = (from, ok2) => {
+        const seen = /* @__PURE__ */ new Set([from]), st = [from];
+        while (st.length) {
+          const a = st.pop();
+          for (const b of adjT.get(a)) if (ok2(b) && !seen.has(b)) {
+            seen.add(b);
+            st.push(b);
+          }
         }
-      }
-      const lost = act.filter((c) => !seen.has(c.id));
+        return seen;
+      };
+      const all = reach(ch.list[0].id, () => true);
+      const lost = ch.list.filter((c) => !all.has(c.id));
       if (lost.length) {
         msgs.push(["error", `${lost.length} chamber(s) cannot be reached from the rest.`]);
         lost.forEach((c) => bad.add(c.id));
       }
+      if (act.length > 1) {
+        const seen = reach(act[0].id, isAct);
+        const cut = act.filter((c) => !seen.has(c.id));
+        if (cut.length) {
+          msgs.push(["error", `${cut.length} starting chamber(s) are cut off from the rest of the starting area.`]);
+          cut.forEach((c) => bad.add(c.id));
+        }
+      }
       let lo = 0, hi = 0;
-      for (const c of act) {
+      for (const c of ch.list) {
         const d = deg.get(c.id);
         if (d < 1) {
           lo++;
@@ -741,12 +922,24 @@ button:disabled{opacity:.45;cursor:not-allowed}
       bad.add(c.id);
     }
     if (sp) msgs.push(["error", `${sp} chamber(s) have more than 2 sponges.`]);
+    const brood = ch.list.filter((c) => c.merged);
+    if (brood.length && !brood.some((c) => c.active)) msgs.push(["error", "The starting area has no brood chamber."]);
+    const wantS = Math.max(0, Math.round(P2.sponges || 0));
+    if (wantS > 0 && spongeLength(P2, G2) >= 8) {
+      if (act.length && !startSponge) msgs.push(["error", "No sponge touches the starting area, so the ants have no water."]);
+      if (spongesN < wantS) msgs.push(["warn", `Only ${spongesN} of ${wantS} sponges are in the layout.`]);
+    } else if (wantS > 0) msgs.push(["warn", "Sponge pockets do not fit in cells this small, so this nest has no water source."]);
     const blocked = geo2.ports.filter((p) => !p.cut);
     if (blocked.length) msgs.push(["warn", `${blocked.length} port(s) skipped (${[...new Set(blocked.map((p) => p.why))].join(", ")}). Shown as red crosses.`]);
     const live = geo2.ports.filter((p) => p.cut && p.active);
-    if (!live.length && act.length) msgs.push(["error", "No port opens into an active chamber, so the nest has no entrance."]);
+    if (!live.length && act.length) msgs.push(["error", "No port opens into the starting area, so the nest has no entrance."]);
     const plugs = geo2.ports.filter((p) => p.cut).length;
-    if (plugs) msgs.push(["info", `${plugs} port(s) are cut. Plug every port you are not using (${live.length} open into active chambers).`]);
+    if (plugs) msgs.push(["info", `${plugs} port(s) are cut. Plug every port you are not using (${live.length} open into the starting area).`]);
+    if (closed && geo2.doors.length) msgs.push(["info", `${closed} door(s) start closed.`]);
+    if (closed && !geo2.doors.length) msgs.push(["warn", `${closed} tunnel(s) lead out of the starting area but there are no doors to close them.`]);
+    const noTabs = geo2.pieces.filter((pc) => pc.notches.length && !pc.top.length).length;
+    if (noTabs) msgs.push(["warn", `${noTabs} tunnel strip(s) are too short for tabs. Shorten the tab length or glue them.`]);
+    if (geo2.minWeb < 1) msgs.push(["warn", `Two cuts in a sheet are only ${geo2.minWeb.toFixed(2)}mm apart and may crack.`]);
     for (const e of geo2.errors) msgs.push(["error", e]);
     for (const w of geo2.warnings) msgs.push(["warn", w]);
     const ok = !msgs.some((m) => m[0] === "error");
@@ -807,20 +1000,17 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
   // src/strip.js
   function stripOutline(pc, G2, P2) {
-    const len = pc.e - pc.s, dep = G2.depth, S = P2.S, tl = P2.tabL;
+    const len = pc.e - pc.s, dep = G2.depth, S = P2.S, tl = pc.tabL || P2.tabL;
+    const fromFront = G2.service === "front";
+    const tab = (u, y) => ({ a: u - tl / 2, b: u + tl / 2, y });
+    const notch = (n, y) => ({ a: n - pc.s - G2.tunnelW / 2, b: n - pc.s + G2.tunnelW / 2, y });
+    const front = pc.top.map((u) => tab(u, -S)), back = pc.bot.map((u) => tab(u, dep + S));
+    if (fromFront) for (const n of pc.notches) front.push(notch(n, G2.tunnelH));
+    else for (const n of pc.notches) back.push(notch(n, dep - G2.tunnelH));
     const pts = [[0, 0]];
-    for (const u of pc.top.slice().sort((a, b) => a - b)) {
-      pts.push([u - tl / 2, 0], [u - tl / 2, -S], [u + tl / 2, -S], [u + tl / 2, 0]);
-    }
+    for (const f of front.sort((x, y) => x.a - y.a)) pts.push([f.a, 0], [f.a, f.y], [f.b, f.y], [f.b, 0]);
     pts.push([len, 0], [len, dep]);
-    const feats = [];
-    for (const u of pc.bot) feats.push({ a: u - tl / 2, b: u + tl / 2, y: dep + S });
-    for (const n of pc.notches) {
-      const u = n - pc.s;
-      feats.push({ a: u - G2.tunnelW / 2, b: u + G2.tunnelW / 2, y: dep - G2.tunnelH });
-    }
-    feats.sort((x, y) => y.a - x.a);
-    for (const f of feats) pts.push([f.b, dep], [f.b, f.y], [f.a, f.y], [f.a, dep]);
+    for (const f of back.sort((x, y) => y.a - x.a)) pts.push([f.b, dep], [f.b, f.y], [f.a, f.y], [f.a, dep]);
     pts.push([0, dep]);
     return pts;
   }
@@ -846,7 +1036,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
     }
     for (const pc of geo2.pieces) {
       const r = pc.rect;
-      o.push(`<rect x="${fmt(r.x0)}" y="${fmt(r.y0)}" width="${fmt(r.x1 - r.x0)}" height="${fmt(r.y1 - r.y0)}" fill="${pc.kind === "wall" ? "#5b4fc4" : "#3c6fb0"}"/>`);
+      o.push(`<rect x="${fmt(r.x0)}" y="${fmt(r.y0)}" width="${fmt(r.x1 - r.x0)}" height="${fmt(r.y1 - r.y0)}" fill="${pc.kind === "wall" ? "#5b4fc4" : pc.kind === "lip" ? "#8f86d8" : "#3c6fb0"}"/>`);
     }
     const tw = G2.tunnelW;
     for (const pc of geo2.pieces) for (const n of pc.notches) {
@@ -877,7 +1067,24 @@ button:disabled{opacity:.45;cursor:not-allowed}
       o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="${p.active ? "#2fb37a" : "#9aa3a5"}"/>`);
       if (opts.labels) o.push(`<text x="${fmt(horiz ? p.pos : p.side === "left" ? -2 : W + 2)}" y="${fmt(horiz ? p.side === "top" ? -1 : H + 3.5 : p.pos)}" font-size="3" text-anchor="${horiz ? "middle" : p.side === "left" ? "end" : "start"}" fill="#333">${p.id}</text>`);
     }
-    for (const b of geo2.bolts) o.push(`<circle cx="${fmt(b.x)}" cy="${fmt(b.y)}" r="${fmt(P2.boltD / 2)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);
+    for (const b of geo2.fasteners) {
+      if (P2.fastener === "bolt") {
+        o.push(`<circle cx="${fmt(b.x)}" cy="${fmt(b.y)}" r="${fmt(P2.boltD / 2)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);
+        continue;
+      }
+      const hx = (b.along === "x" ? P2.pegW : t) / 2, hy = (b.along === "x" ? t : P2.pegW) / 2;
+      o.push(`<rect x="${fmt(b.x - hx)}" y="${fmt(b.y - hy)}" width="${fmt(2 * hx)}" height="${fmt(2 * hy)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);
+    }
+    for (const s of geo2.sockets) {
+      const hl = (geo2.socketL - 4) / 2, hx = s.along === "x" ? hl : t / 2, hy = s.along === "x" ? t / 2 : hl;
+      o.push(`<rect x="${fmt(s.x - hx)}" y="${fmt(s.y - hy)}" width="${fmt(2 * hx)}" height="${fmt(2 * hy)}" fill="#f3b0b2" stroke="#b33" stroke-width="0.3"/>`);
+    }
+    for (const d of geo2.doors) {
+      if (!d.closed) continue;
+      const w2 = G2.tunnelW / 2 + 0.8, h2 = t / 2 + 0.8;
+      const r = d.orient === "H" ? [d.x - w2, d.y - h2, 2 * w2, 2 * h2] : [d.x - h2, d.y - w2, 2 * h2, 2 * w2];
+      o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="#e8933a"/>`);
+    }
     for (const v of geo2.vents) o.push(`<circle cx="${fmt(v.x)}" cy="${fmt(v.y)}" r="${fmt(Math.max(0.35, P2.ventD / 2))}" fill="#9b8a63"/>`);
     for (const f of geo2.fills) o.push(`<circle cx="${fmt(f.x)}" cy="${fmt(f.y)}" r="${fmt(P2.fillD / 2)}" fill="none" stroke="#fff" stroke-width="0.6"/>`);
     if (rules2) for (const id of rules2.bad) {
@@ -923,44 +1130,168 @@ button:disabled{opacity:.45;cursor:not-allowed}
     return o.join("");
   }
 
+  // src/hardware.js
+  var PEG_FIT = 0.1;
+  function pegPart(G2, P2) {
+    const pw = P2.pegW, head = pw + 6, headH = 3, shank = 2 * P2.S + G2.depth, keyH = 2.7, rim = 2;
+    const e = (head - pw) / 2, total = headH + shank + keyH + rim;
+    const hw = G2.t + 0.2, cx = head / 2, y = headH + shank;
+    return {
+      name: "peg",
+      w: head,
+      h: total,
+      poly: [[0, 0], [head, 0], [head, headH], [head - e, headH], [head - e, total], [e, total], [e, headH], [0, headH]],
+      holes: [rectPts(cx - hw / 2, y, cx + hw / 2, y + keyH)]
+    };
+  }
+  function keyPart() {
+    const L2 = 16;
+    return { name: "key", w: L2, h: 2.6, poly: [[0, 0], [L2, 0], [L2, 2.6], [0, 1.6]], holes: [] };
+  }
+  function plugPart(G2, P2) {
+    const fit = 0.1, w = G2.tunnelW - 2 * fit, head = G2.tunnelW + 6, headH = 3, L2 = headH + P2.B;
+    const e = (head - w) / 2, cx = head / 2, cy = headH + P2.B / 2, pw = G2.t + 0.2, ph = 2.2;
+    return {
+      name: "plug",
+      w: head,
+      h: L2,
+      poly: [[0, 0], [head, 0], [head, headH], [head - e, headH], [head - e, L2], [e, L2], [e, headH], [0, headH]],
+      holes: [rectPts(cx - pw / 2, cy - ph / 2, cx + pw / 2, cy + ph / 2)]
+    };
+  }
+  function plugPinPart(G2) {
+    return { name: "plug pin", w: G2.depth, h: 2, poly: rectPts(0, 0, G2.depth, 2), holes: [] };
+  }
+  function coverLeg(G2, P2, geo2) {
+    const L2 = geo2.socketL, stand = coverStand(G2, P2), tabH = P2.S + 3, inset = 2;
+    const a = inset, b = L2 - inset, top = P2.S, h = top + stand + tabH;
+    return {
+      name: "cover leg",
+      w: L2,
+      h,
+      poly: [[a, 0], [b, 0], [b, top], [L2, top], [L2, top + stand], [b, top + stand], [b, h], [a, h], [a, top + stand], [0, top + stand], [0, top], [a, top]],
+      holes: []
+    };
+  }
+  function coverStand(G2, P2) {
+    if (P2.coverStand != null) return P2.coverStand;
+    const z = doorType(P2).sizes(G2, P2);
+    return (z ? z.stickOpen : 6) + 2;
+  }
+  function footPart(G2, P2) {
+    const thick = 2 * P2.S + G2.depth + 0.2, L2 = Math.max(90, Math.round(P2.H * 0.45)), h = 20, d = 5;
+    const a = (L2 - thick) / 2, b = a + thick;
+    return { name: "foot", w: L2, h, poly: [[0, 0], [a, 0], [a, d], [b, d], [b, 0], [L2, 0], [L2, h], [0, h]], holes: [] };
+  }
+  function hardwareParts(G2, L2, P2, geo2) {
+    const out = [];
+    out.push(...doorType(P2).parts(G2, P2, geo2.doors.length));
+    const nf = geo2.fasteners.length;
+    if (P2.fastener === "peg" && nf) {
+      out.push(Object.assign(pegPart(G2, P2), { qty: nf }), Object.assign(keyPart(), { qty: nf }));
+    }
+    const nPorts = geo2.ports.filter((p) => p.cut).length;
+    if (nPorts) {
+      out.push(Object.assign(plugPart(G2, P2), { qty: nPorts * P2.layers }), Object.assign(plugPinPart(G2), { qty: nPorts }));
+    }
+    if (P2.coverType === "whole" && geo2.sockets.length) out.push(Object.assign(coverLeg(G2, P2, geo2), { qty: geo2.sockets.length }));
+    if (P2.orient === "upright") out.push(Object.assign(footPart(G2, P2), { qty: 2 }));
+    return out;
+  }
+
   // src/export.js
   function svgDoc(w, h, body, title) {
     return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(w)}mm" height="${fmt(h)}mm" viewBox="0 0 ${fmt(w)} ${fmt(h)}">
+<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(w + 2)}mm" height="${fmt(h + 2)}mm" viewBox="-1 -1 ${fmt(w + 2)} ${fmt(h + 2)}">
 <title>${title}</title>
 ${body}
 </svg>
 `;
   }
-  function exporters(G2, L2, P2, geo2) {
+  function labelX(w, notches, tunnelW, id) {
+    const hw = id.length * 0.9 + 1;
+    for (let d = 0; d <= w / 2; d += 1) for (const x of [w / 2 - d, w / 2 + d]) {
+      if (x < hw || x > w - hw) continue;
+      if (notches.every((n) => Math.abs(n - x) >= tunnelW / 2 + hw)) return x;
+    }
+    return null;
+  }
+  function pen(P2) {
     const k2 = P2.kerf / 2, cut = `fill="none" stroke="${P2.cutColor}" stroke-width="0.01"`;
     const cutPoly = (pts, d, tx = 0, ty = 0) => `<path d="${polyD(offsetPoly(pts, d).map((q) => [q[0] + tx, q[1] + ty]))}" ${cut}/>`;
-    const hole = (x2, y2, dia) => `<circle cx="${fmt(x2)}" cy="${fmt(y2)}" r="${fmt(Math.max(0.05, dia / 2 - k2))}" ${cut}/>`;
-    const txt = (x2, y2, s, size, rot) => `<text x="${fmt(x2)}" y="${fmt(y2)}" font-size="${fmt(size)}" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" fill="${P2.engraveColor}" stroke="none"${rot ? ` transform="rotate(${rot} ${fmt(x2)} ${fmt(y2)})"` : ""}>${s}</text>`;
+    return {
+      k2,
+      cutPoly,
+      outline: (pts, tx = 0, ty = 0) => cutPoly(pts, k2, tx, ty),
+      cutout: (pts, tx = 0, ty = 0) => cutPoly(pts, -k2, tx, ty),
+      rect: (s) => cutPoly(rectPts(s.x0, s.y0, s.x1, s.y1), -k2),
+      hole: (x, y, dia) => `<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(Math.max(0.05, dia / 2 - k2))}" ${cut}/>`,
+      txt: (x, y, s, size, rot) => `<text x="${fmt(x)}" y="${fmt(y)}" font-size="${fmt(size)}" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" fill="${P2.engraveColor}" stroke="none"${rot ? ` transform="rotate(${rot} ${fmt(x)} ${fmt(y)})"` : ""}>${s}</text>`
+    };
+  }
+  function borderSlot(o, len, t, fit) {
+    const hl = len / 2 + fit, ht = t / 2 + fit;
+    return o.along === "x" ? { x0: o.x - hl, x1: o.x + hl, y0: o.y - ht, y1: o.y + ht } : { x0: o.x - ht, x1: o.x + ht, y0: o.y - hl, y1: o.y + hl };
+  }
+  function fastenerCuts(G2, P2, geo2, d) {
+    if (P2.fastener === "bolt") return geo2.fasteners.map((o) => d.hole(o.x, o.y, P2.boltD));
+    if (P2.fastener === "peg") return geo2.fasteners.map((o) => d.rect(borderSlot(o, P2.pegW, G2.t, PEG_FIT)));
+    return [];
+  }
+  function socketCuts(G2, geo2, d, tab) {
+    return geo2.sockets.map((o) => d.rect(borderSlot(o, tab, G2.t, PEG_FIT)));
+  }
+  function exporters(G2, L2, P2, geo2) {
+    const d = pen(P2);
     const W = P2.W, H = P2.H;
     const files = [];
-    function sheet(name, slots, fillHere, vents, label) {
+    const fillOn = (side) => P2.fillSide === "both" || P2.fillSide === side || P2.fillSide === "service" && G2.service === side;
+    const sockTab = geo2.socketL - 4;
+    function sheet(side, name, slots, vents, label) {
       const b = [];
-      b.push(cutPoly(rectPts(0, 0, W, H), k2));
-      for (const s of slots) b.push(cutPoly(rectPts(s.x0, s.y0, s.x1, s.y1), -k2));
-      for (const o of geo2.bolts) b.push(hole(o.x, o.y, P2.boltD));
-      if (vents) for (const v of geo2.vents) b.push(hole(v.x, v.y, P2.ventD));
-      if (fillHere) for (const f of geo2.fills) b.push(hole(f.x, f.y, P2.fillD));
-      if (P2.engraveIds) b.push(txt(W / 2, P2.B / 2, label, Math.min(4, P2.B * 0.35)));
+      b.push(d.outline(rectPts(0, 0, W, H)));
+      for (const s of slots) b.push(d.rect(s));
+      if (G2.service === side) for (const s of geo2.doorSlots) b.push(d.rect(s));
+      b.push(...fastenerCuts(G2, P2, geo2, d));
+      b.push(...socketCuts(G2, geo2, d, sockTab));
+      if (vents) for (const v of geo2.vents) b.push(d.hole(v.x, v.y, P2.ventD));
+      if (fillOn(side)) for (const f of geo2.fills) b.push(d.hole(f.x, f.y, P2.fillD));
+      if (P2.engraveIds) b.push(d.txt(W / 2, P2.B / 2, label, Math.min(4, P2.B * 0.35)));
       files.push({ name, data: svgDoc(W, H, b.join("\n"), label) });
     }
-    sheet("front-sheet.svg", geo2.slotsFront, P2.fillSide !== "back", true, "FRONT (outside face up, top edge)");
-    sheet("back-sheet.svg", geo2.slotsBack, P2.fillSide !== "front", false, "BACK (inside face up, top edge)");
+    const flat = P2.orient === "flat";
+    sheet("front", "front-sheet.svg", geo2.slotsFront, true, flat ? "TOP SHEET (top face up, north edge)" : "FRONT (outside face up, top edge)");
+    sheet("back", "back-sheet.svg", geo2.slotsBack, false, flat ? "FLOOR SHEET (inside face up, north edge)" : "BACK (inside face up, top edge)");
     {
       const b = [];
       for (const f of geo2.frame) {
-        b.push(cutPoly(f.poly, k2));
-        if (f.hole) b.push(cutPoly(f.hole, -k2));
+        b.push(d.outline(f.poly));
+        if (f.hole) b.push(d.cutout(f.hole));
       }
-      for (const o of geo2.bolts) b.push(hole(o.x, o.y, P2.boltD));
+      b.push(...fastenerCuts(G2, P2, geo2, d));
+      b.push(...socketCuts(G2, geo2, d, sockTab));
       files.push({ name: `frame-layer-cut-x${P2.layers}.svg`, data: svgDoc(W, H, b.join("\n"), `Frame layer, cut ${P2.layers} times`) });
     }
-    const parts = geo2.pieces.map((pc) => ({ pc, w: pc.e - pc.s, h: G2.depth + 2 * P2.S })).sort((a, b) => b.w - a.w);
+    if (P2.coverType === "whole" && geo2.sockets.length) {
+      const b = [d.outline(rectPts(0, 0, W, H)), ...socketCuts(G2, geo2, d, sockTab)];
+      files.push({ name: "cover-sheet.svg", data: svgDoc(W, H, b.join("\n"), "Cover sheet (red acrylic)") });
+    }
+    const items = geo2.pieces.map((pc) => ({ w: pc.e - pc.s, h: G2.depth + 2 * P2.S, draw(x2, y2) {
+      const ty = y2 + P2.S, o = [d.outline(stripOutline(pc, G2, P2), x2, ty)];
+      for (const [a0, a1] of pc.windows) o.push(d.cutout(rectPts(a0, 2, a1, G2.depth - 2), x2, ty));
+      if (P2.engraveIds && pc.kind === "wall" && this.w >= 14) {
+        const lx = labelX(this.w, pc.notches.map((n) => n - pc.s), G2.tunnelW, pc.id);
+        if (lx !== null) o.push(d.txt(x2 + lx, ty + G2.depth / 2, pc.id, Math.min(2.6, G2.depth / 4)));
+      }
+      return o;
+    } }));
+    const kit = hardwareParts(G2, L2, P2, geo2);
+    for (const part of kit) for (let n = 0; n < part.qty; n++) items.push({ w: part.w, h: part.h, draw(x2, y2) {
+      const o = [d.outline(part.poly, x2, y2)];
+      for (const h of part.holes) o.push(d.cutout(h, x2, y2));
+      return o;
+    } });
+    items.sort((a, b) => b.w - a.w);
     const margin = 5, gap = 2 + P2.kerf;
     const sheets = [];
     let cur = null, x = 0, y = 0, rowH = 0;
@@ -972,7 +1303,7 @@ ${body}
       rowH = 0;
     };
     newSheet();
-    for (const it of parts) {
+    for (const it of items) {
       if (x + it.w > P2.stockW - margin) {
         x = margin;
         y += rowH + gap;
@@ -987,24 +1318,64 @@ ${body}
     }
     sheets.forEach((sh, i) => {
       const b = [];
-      for (const { it, x: x2, y: y2 } of sh) {
-        const pc = it.pc, ty = y2 + P2.S;
-        b.push(cutPoly(stripOutline(pc, G2, P2), k2, x2, ty));
-        for (const [a0, a1] of pc.windows) b.push(cutPoly(rectPts(a0, 2, a1, G2.depth - 2), -k2, x2, ty));
-        if (P2.engraveIds && pc.kind === "wall" && it.w >= 14) {
-          const label = pc.id;
-          let lx = x2 + it.w / 2;
-          const nl = pc.notches.map((n) => n - pc.s);
-          if (nl.some((n) => Math.abs(n - it.w / 2) < G2.tunnelW / 2 + 6)) lx = x2 + Math.min(it.w - 8, Math.max(8, it.w / 4));
-          b.push(txt(lx, ty + Math.min(3, G2.depth / 4), label, Math.min(2.6, G2.depth / 4)));
-        }
-      }
-      files.push({ name: `strips-sheet-${i + 1}.svg`, data: svgDoc(P2.stockW, P2.stockH, b.join("\n"), `Wall strips, sheet ${i + 1} of ${sheets.length}`) });
+      for (const { it, x: x2, y: y2 } of sh) b.push(...it.draw(x2, y2));
+      files.push({ name: `parts-sheet-${i + 1}.svg`, data: svgDoc(P2.stockW, P2.stockH, b.join("\n"), `Wall sheet parts, sheet ${i + 1} of ${sheets.length}`) });
     });
     const asm = drawTopdown(G2, L2, P2, geo2, null, { labels: true, mm: true });
     files.push({ name: "assembly-map.svg", data: `<?xml version="1.0" encoding="UTF-8"?>
 ` + asm });
-    return { files, stripSheets: sheets.length };
+    return { files, stripSheets: sheets.length, kit };
+  }
+  function testPiece(G2, P2) {
+    const d = pen(P2), t = G2.t, b = [];
+    const W = 170, H = 120;
+    const lab = (x, y, s) => d.txt(x, y, s, 2.4);
+    b.push(lab(32, 4, "KERF: 5 x 10mm, measure stack"));
+    for (let i = 0; i < 5; i++) b.push(`<path d="${polyD(rectPts(7 + i * 10, 7, 17 + i * 10, 17))}" fill="none" stroke="${P2.cutColor}" stroke-width="0.01"/>`);
+    b.push(lab(120, 4, "TAB FIT: slot clearance"));
+    b.push(d.outline(rectPts(70, 7, 165, 27)));
+    [-0.1, -0.05, 0, 0.05, 0.1].forEach((c, i) => {
+      const cx = 80 + i * 18;
+      b.push(d.rect({ x0: cx - P2.tabL / 2 - c / 2, x1: cx + P2.tabL / 2 + c / 2, y0: 14 - t / 2 - c / 2, y1: 14 + t / 2 + c / 2 }));
+      b.push(lab(cx, 22, fmt(c)));
+    });
+    b.push(lab(52, 32, "DOOR FIT: per side"));
+    b.push(d.outline(rectPts(5, 35, 100, 55)));
+    const fits = [0.05, 0.1, 0.15, 0.2, 0.25];
+    fits.forEach((f, i) => {
+      const cx = 15 + i * 18;
+      b.push(d.rect({ x0: cx - G2.tunnelW / 2, x1: cx + G2.tunnelW / 2, y0: 42 - t / 2 - f, y1: 42 + t / 2 + f }));
+      b.push(lab(cx, 50, fmt(f)));
+    });
+    const len = 50, pc = { s: 0, e: len, top: [9, len - 9], bot: [9, len - 9], notches: [len / 2] };
+    b.push(lab(135, 32, "WALL, DOOR, SADDLE"));
+    b.push(d.outline(stripOutline(pc, G2, P2), 110, 38 + P2.S));
+    const parts = doorType(P2).parts(G2, P2, 1);
+    let px = 5, py = 64;
+    for (const part of parts) {
+      b.push(d.outline(part.poly, px, py));
+      for (const h of part.holes) b.push(d.cutout(h, px, py));
+      px += part.w + 3;
+    }
+    const peg = pegPart(G2, P2), key = keyPart();
+    b.push(d.outline(peg.poly, px, py));
+    for (const h of peg.holes) b.push(d.cutout(h, px, py));
+    px += peg.w + 3;
+    b.push(d.outline(key.poly, px, py));
+    b.push(d.outline(rectPts(px, py + 6, px + 24, py + 22)));
+    b.push(d.rect(borderSlot({ x: px + 12, y: py + 14, along: "x" }, P2.pegW, t, PEG_FIT)));
+    b.push(lab(px + 12, py + 19, "PEG SLOT"));
+    b.push(lab(52, 92, "VENT HOLES AND SLOTS (mm)"));
+    b.push(d.outline(rectPts(5, 95, 165, 115)));
+    [0.4, 0.5, 0.6, 0.8, 1, 1.2].forEach((v, i) => {
+      const cx = 15 + i * 12;
+      b.push(d.hole(cx, 101, v));
+      b.push(lab(cx, 110, fmt(v)));
+      const sx = 95 + i * 11;
+      b.push(d.rect({ x0: sx - v / 2, x1: sx + v / 2, y0: 98, y1: 106 }));
+      b.push(lab(sx, 110, fmt(v)));
+    });
+    return { name: "test-piece.svg", data: svgDoc(W, H, b.join("\n"), "Fit test piece") };
   }
 
   // src/app.js
@@ -1063,23 +1434,24 @@ ${body}
   var history = [];
   var TOOLHELP = {
     wall: "Tap a wall to cycle solid, tunnel, sponge.",
-    cell: "Tap a chamber to switch it on or off. Off chambers are sealed and their tunnels close.",
+    cell: "Tap a chamber to add it to, or remove it from, the starting area. Everything is still cut; this only sets which doors start closed.",
     merge: "Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it."
   };
-  function snapshot() {
-    history.push(JSON.stringify(L));
+  function snapshot(p = P) {
+    history.push(JSON.stringify({ L, P: p }));
     if (history.length > 60) history.shift();
   }
-  function regenerate() {
-    if (L) snapshot();
+  function regenerate(prev = P) {
+    if (L) snapshot(prev);
     G = derive(P);
     L = generate(G, P);
   }
   function onParamChange(k) {
+    const prev = P;
     P = readParams();
     const g = derive(P);
     if (GEN_KEYS.has(k) || !L || g.cols !== L.cols || g.rows !== L.rows) {
-      regenerate();
+      regenerate(prev);
     }
     render();
   }
@@ -1108,12 +1480,13 @@ ${body}
       ["Chamber inside", `about ${f1(G.cellW - G.t)} x ${f1(G.cellH - G.t)} mm`],
       ["Depth", `${f1(G.depth)} mm`],
       ["Tunnels", `${f1(G.tunnelW)} wide x ${f1(G.tunnelH)} high`],
-      ["Chambers active", `${act.length} of ${geo.ch.list.length}`],
+      ["Open at start", `${act.length} of ${geo.ch.list.length} chambers`],
       ["Tunnels / sponges", `${tunnels} / ${spongesN}`],
       ["Strip parts", `${geo.pieces.length} (${f1(stripLen / 1e3)} m)`],
-      ["Strip stock sheets", `${ex.stripSheets} at ${P.stockW} x ${P.stockH}`],
+      ["Wall sheets", `${ex.stripSheets} at ${P.stockW} x ${P.stockH}`],
       ["Frame", `${geo.frame.length} pieces x ${P.layers} layers`],
-      ["Bolts", `${geo.bolts.length}`],
+      ["Doors", `${geo.doors.length} (${geo.doors.filter((d) => d.closed).length} start closed)`],
+      ["Fasteners", `${geo.fasteners.length} ${P.fastener === "peg" ? "pegs and keys" : P.fastener === "bolt" ? "bolts" : ""}`],
       ["Ports cut", `${geo.ports.filter((p) => p.cut).length} (${geo.ports.filter((p) => p.cut && p.active).length} live)`]
     ];
     document.getElementById("stats").innerHTML = st.map(([a, b]) => `<div><span>${a}:</span> ${b}</div>`).join("");
@@ -1148,9 +1521,6 @@ ${body}
       const ch = chambers(L), id = ch.id[r][c], cham = ch.list[id];
       const on = !cham.active;
       for (const [rr, cc] of cham.cells) L.active[rr][cc] = on;
-      if (!on) {
-        for (const e of interiorEdges(L, ch)) if ((e.a === id || e.b === id) && getEdge(L, e) !== "solid") setEdge(L, e, "solid");
-      }
       render();
       return;
     }
@@ -1224,7 +1594,10 @@ ${body}
         setStatus("Nothing to undo.");
         return;
       }
-      L = JSON.parse(history.pop());
+      const h = JSON.parse(history.pop());
+      L = h.L;
+      P = h.P;
+      for (const f of ALL_FIELDS) setField(f, P[f.k]);
       render();
     });
     document.getElementById("regen").addEventListener("click", () => {
@@ -1257,6 +1630,10 @@ ${body}
       const f = div._files[+b.dataset.file];
       if (f) await saveFile(f.name, f.data);
     });
+    document.getElementById("testPiece").addEventListener("click", () => {
+      const f = testPiece(G, P);
+      saveFile(f.name, f.data);
+    });
     document.getElementById("saveLayout").addEventListener("click", () => saveFile(`nest-layout-${P.W}x${P.H}.json`, layoutJSON()));
     const fi = document.getElementById("loadLayout");
     document.getElementById("loadBtn").addEventListener("click", () => fi.click());
@@ -1266,10 +1643,13 @@ ${body}
       try {
         const j = JSON.parse(await file.text());
         if (!j.layout || !j.params) throw new Error("not a layout file");
+        const l = j.layout, g = derive(Object.assign({}, P, j.params));
+        if (!Array.isArray(l.H) || !Array.isArray(l.V) || !Array.isArray(l.active) || !Array.isArray(l.merges)) throw new Error("layout data is incomplete");
+        if (l.cols !== g.cols || l.rows !== g.rows) throw new Error(`layout is ${l.cols} x ${l.rows} but these settings give ${g.cols} x ${g.rows}`);
+        snapshot();
         for (const f of ALL_FIELDS) if (f.k in j.params) setField(f, j.params[f.k]);
         P = readParams();
-        snapshot();
-        L = j.layout;
+        L = l;
         render();
         setStatus("Loaded " + file.name + ".");
       } catch (e) {
@@ -1289,7 +1669,7 @@ ${body}
   }
   window.__nest = { get state() {
     return { P, G, L, geo, rules };
-  }, derive, generate, buildGeometry, checkRules, exporters, offsetPoly, stripOutline };
+  }, derive, generate, buildGeometry, checkRules, exporters, offsetPoly, stripOutline, testPiece };
   init();
 })();
 

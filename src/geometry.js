@@ -1,5 +1,6 @@
 import {f1,rectPts} from './util.js';
-import {stH,stV,chambers,chamberCenter} from './layout.js';
+import {stH,stV,chambers,chamberCenter,interiorEdges,getEdge} from './layout.js';
+import {doorType} from './doors.js';
 import {spongeLength} from './generate.js';
 /* ---------------- geometry ---------------- */
 // Tabs go in the solid runs either side of each tunnel notch, leaving room for a door slot.
@@ -89,12 +90,35 @@ export function buildGeometry(G,L,P){
       runPieces('V',i,xs[i],a,b,s,e,q=>vS(q,i),q=>(ys[q]+ys[q+1])/2);
     }
   }
+  // doors, one per tunnel
+  const ch=chambers(L);
+  const dt=doorType(P),doors=[];
+  for(const e of interiorEdges(L,ch)){
+    if(getEdge(L,e)!=='tunnel')continue;
+    const closed=!(ch.list[e.a].active&&ch.list[e.b].active);
+    const x=e.type==='H'?(xs[e.k]+xs[e.k+1])/2:xs[e.i], y=e.type==='H'?ys[e.j]:(ys[e.r]+ys[e.r+1])/2;
+    doors.push({orient:e.type,x,y,closed});
+  }
+  const doorSlots=doors.map(d=>dt.slot(d,G,P)).filter(Boolean);
+  // upright nests: small lips either side of tunnels through floors, to hold back loose sand
+  if(P.orient==='upright'&&P.lipH>=2.5){
+    const web=1.5;
+    let n=0;
+    for(const d of doors){
+      if(d.orient!=='H')continue;
+      n++;
+      for(const [suf,sgn] of [['a',-1],['b',1]]){
+        const cx=d.x+sgn*(tunnelW/2+t/2);
+        pieces.push({id:'L'+n+suf,orient:'V',c:cx,s:d.y-t/2-P.lipH,e:d.y-t/2,notches:[],kind:'lip',windows:[],tabL:P.lipH-web});
+      }
+    }
+  }
   // tabs and slots
   const slotsFront=[],slotsBack=[];
   const cl=P.slotClear;
   for(const pc of pieces){
     const len=pc.e-pc.s;
-    pc.top=tabPositions(len,pc.notches.map(x=>x-pc.s),G,P);
+    pc.top=pc.kind==='lip'?[pc.tabL/2]:tabPositions(len,pc.notches.map(x=>x-pc.s),G,P);
     pc.bot=pc.top.slice();
     if(pc.kind==='vent'){
       const pitch=P.slotW+2.5, a0=t+1.5, a1=len-(t+1.5);
@@ -102,8 +126,9 @@ export function buildGeometry(G,L,P){
     }
     const slot=(u)=>{
       const g=pc.s+u;
-      return pc.orient==='H'?{x0:g-P.tabL/2-cl/2,x1:g+P.tabL/2+cl/2,y0:pc.c-t/2-cl/2,y1:pc.c+t/2+cl/2}
-                            :{x0:pc.c-t/2-cl/2,x1:pc.c+t/2+cl/2,y0:g-P.tabL/2-cl/2,y1:g+P.tabL/2+cl/2};
+      const tl=(pc.tabL||P.tabL)/2;
+      return pc.orient==='H'?{x0:g-tl-cl/2,x1:g+tl+cl/2,y0:pc.c-t/2-cl/2,y1:pc.c+t/2+cl/2}
+                            :{x0:pc.c-t/2-cl/2,x1:pc.c+t/2+cl/2,y0:g-tl-cl/2,y1:g+tl+cl/2};
     };
     for(const u of pc.top)slotsFront.push(Object.assign(slot(u),{id:pc.id}));
     for(const u of pc.bot)slotsBack.push(Object.assign(slot(u),{id:pc.id}));
@@ -113,7 +138,6 @@ export function buildGeometry(G,L,P){
     pc.rect=pc.orient==='H'?{x0:pc.s,x1:pc.e,y0:pc.c-t/2,y1:pc.c+t/2}:{x0:pc.c-t/2,x1:pc.c+t/2,y0:pc.s,y1:pc.e};
   }
   // ports
-  const ch=chambers(L);
   const ports=[];
   const w=tunnelW;
   if(P.portPitch>=5){
@@ -142,29 +166,54 @@ export function buildGeometry(G,L,P){
     const s=sideIdx[p.side];const q=s===0||s===1?p.pos:(s===2?W-p.pos:H-p.pos);return {side:s,q};
   });
   const frame=framePieces(W,H,B,cuts,w);
-  // bolts
+  // pegs or bolts around the border
+  const fastD=P.fastener==='peg'?P.pegW:P.boltD;
   const bolts=[];
-  const portNear=(side,pos)=>ports.some(p=>p.cut&&p.side===side&&Math.abs(p.pos-pos)<w/2+P.boltD/2+1.5);
+  const portNear=(side,pos)=>ports.some(p=>p.cut&&p.side===side&&Math.abs(p.pos-pos)<w/2+fastD/2+1.5);
   const hb=B/2;
-  for(const [x,y] of [[hb,hb],[W-hb,hb],[W-hb,H-hb],[hb,H-hb]])bolts.push({x,y});
+  for(const [x,y] of [[hb,hb],[W-hb,hb],[W-hb,H-hb],[hb,H-hb]])bolts.push({x,y,along:'x'});
   for(const [side,len] of [['top',W],['bottom',W],['left',H],['right',H]]){
     const span=len-2*hb;const n=Math.max(1,Math.ceil(span/Math.max(10,P.boltSpacing)));
     for(let m=1;m<n;m++){
       let pos=hb+span*m/n;
       if(portNear(side,pos)){
-        const alt=[pos-(w/2+P.boltD/2+3),pos+(w/2+P.boltD/2+3)].find(a=>!portNear(side,a));
+        const alt=[pos-(w/2+fastD/2+3),pos+(w/2+fastD/2+3)].find(a=>!portNear(side,a));
         if(alt===undefined)continue;pos=alt;
       }
-      if(side==='top')bolts.push({x:pos,y:hb});else if(side==='bottom')bolts.push({x:pos,y:H-hb});
-      else if(side==='left')bolts.push({x:hb,y:pos});else bolts.push({x:W-hb,y:pos});
+      if(side==='top')bolts.push({x:pos,y:hb,along:'x'});else if(side==='bottom')bolts.push({x:pos,y:H-hb,along:'x'});
+      else if(side==='left')bolts.push({x:hb,y:pos,along:'y'});else bolts.push({x:W-hb,y:pos,along:'y'});
     }
   }
-  if(P.boltD>B-4)errors.push(`Bolt holes (${P.boltD}mm) are too big for a ${B}mm border.`);
+  if(P.fastener==='bolt'&&P.boltD>B-4)errors.push(`Bolt holes (${P.boltD}mm) are too big for a ${B}mm border.`);
+  if(P.fastener==='peg'&&t+2>B-4)errors.push(`Peg slots are too wide for a ${B}mm border.`);
+  const fasteners=P.fastener==='cement'?[]:bolts;
+  // cover sockets: through slots in the border, so a cover fits either face
+  const socketL=14,sockets=[];
+  if(P.coverType==='whole'){
+    const free=(side,pos)=>{
+      const along=side==='top'||side==='bottom';
+      if(ports.some(p=>p.cut&&p.side===side&&Math.abs(p.pos-pos)<w/2+socketL/2+2))return false;
+      return !fasteners.some(f=>{
+        const onSide=side==='top'?f.y===hb:side==='bottom'?f.y===H-hb:side==='left'?f.x===hb:f.x===W-hb;
+        return onSide&&Math.abs((along?f.x:f.y)-pos)<fastD/2+socketL/2+2;
+      });
+    };
+    for(const [side,len,fr] of [['top',W,[.25,.75]],['bottom',W,[.25,.75]],['left',H,[.5]],['right',H,[.5]]]){
+      for(const f of fr){
+        for(let dd=0;dd<=len/4;dd+=1){
+          const pos=[len*f+dd,len*f-dd].find(q=>q>socketL&&q<len-socketL&&free(side,q));
+          if(pos===undefined)continue;
+          sockets.push(side==='top'?{x:pos,y:hb,along:'x'}:side==='bottom'?{x:pos,y:H-hb,along:'x'}:side==='left'?{x:hb,y:pos,along:'y'}:{x:W-hb,y:pos,along:'y'});
+          break;
+        }
+      }
+    }
+    if(sockets.length<4)warnings.push('Could not find room for all the cover sockets.');
+  }
   // air vents
   const vents=[];
   const vg=Math.max(0,Math.round(P.ventGrid||0)), vp=Math.max(P.ventD*3,4);
   if(vg>0)for(const c of ch.list){
-    if(!c.active)continue;
     const [cx,cy]=chamberCenter(G,c);
     for(let a=0;a<vg;a++)for(let b=0;b<vg;b++)vents.push({x:cx+(a-(vg-1)/2)*vp,y:cy+(b-(vg-1)/2)*vp});
   }
@@ -188,7 +237,17 @@ export function buildGeometry(G,L,P){
     const ox=Math.min(p.x1,q.x1)-Math.max(p.x0,q.x0), oy=Math.min(p.y1,q.y1)-Math.max(p.y0,q.y0);
     if(ox>1e-4&&oy>1e-4)errors.push(`Geometry: ${pieces[a].id} overlaps ${pieces[b].id}.`);
   }
-  return {pieces,sponges,fills,slotsFront,slotsBack,ports,frame,bolts,vents,errors,warnings,ch};
+  // thinnest strip of acrylic left between two cuts in the service sheet
+  const asRect=(x,y,r)=>({x0:x-r,x1:x+r,y0:y-r,y1:y+r});
+  const front=(G.service==='front'?slotsFront:slotsBack).concat(doorSlots,
+    vents.map(v=>asRect(v.x,v.y,P.ventD/2)),fills.map(f=>asRect(f.x,f.y,P.fillD/2)));
+  let minWeb=1e9;
+  for(let a=0;a<front.length;a++)for(let b=a+1;b<front.length;b++){
+    const p=front[a],q=front[b];
+    const dx=Math.max(p.x0-q.x1,q.x0-p.x1,0),dy=Math.max(p.y0-q.y1,q.y0-p.y1,0);
+    minWeb=Math.min(minWeb,Math.hypot(dx,dy));
+  }
+  return {pieces,sponges,fills,slotsFront,slotsBack,doors,doorSlots,ports,frame,fasteners,sockets,socketL,vents,minWeb,errors,warnings,ch};
 }
 
 export function framePieces(W,H,B,cuts,w){

@@ -46,9 +46,32 @@ await check('merge tool splits an existing brood chamber',async p=>{
 await check('export buttons are enabled when rules pass, disabled on an error',async p=>{
   assert.equal(await p.evaluate(()=>window.__nest.state.rules.ok),true);
   assert.equal(await p.$eval('#exports button[data-file="0"]',b=>b.disabled),false);
-  await setField(p,'p_boltD',20);
+  await setField(p,'p_tunnelH',11.5);
   assert.equal(await p.evaluate(()=>window.__nest.state.rules.ok),false);
   assert.equal(await p.$eval('#exports button[data-file="0"]',b=>b.disabled),true);
+});
+await check('undo restores the layout and settings after a grid change',async p=>{
+  await clickSvg(p,'[data-edge="H,1,0"]');
+  const edited=await Ljson(p);
+  await setField(p,'p_W',500);
+  assert.notEqual(await p.evaluate(()=>window.__nest.state.L.cols),JSON.parse(edited).cols);
+  await p.click('#undo');
+  assert.equal(await Ljson(p),edited);
+  assert.equal(await p.$eval('#p_W',e=>e.value),'400');
+});
+await check('starting area tool changes door states but not the cut files',async p=>{
+  const front=()=>p.evaluate(()=>{const s=window.__nest.state;return window.__nest.exporters(s.G,s.L,s.P,s.geo).files.find(f=>f.name==='front-sheet.svg').data;});
+  const before=await front();
+  await p.click('[data-tool="cell"]');
+  await clickSvg(p,'[data-cell="3,0"]');
+  assert.ok(await p.evaluate(()=>window.__nest.state.geo.doors.some(d=>d.closed)));
+  assert.equal(await front(),before);
+});
+await check('test piece button works even with an error showing',async p=>{
+  await setField(p,'p_tunnelH',11.5);
+  const name=await p.evaluate(()=>{const s=window.__nest.state;return window.__nest.testPiece(s.G,s.P).name;});
+  assert.equal(name,'test-piece.svg');
+  assert.equal(await p.$eval('#testPiece',b=>b.disabled),false);
 });
 await browser.close();
 if(failed){console.log(failed,'browser test(s) failed');process.exit(1);}

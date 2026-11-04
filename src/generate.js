@@ -1,6 +1,9 @@
 import {mulberry32,shuffle} from './util.js';
 import {emptyLayout,chambers,adjacency,chamberCenter,interiorEdges,getEdge,setEdge} from './layout.js';
-/* ---------------- auto generator ---------------- */
+
+/* Every chamber is built and joined up. The active setting only picks which doors start open,
+   so the cut files do not depend on it. The starting area always holds a port, a sponge and
+   a brood chamber when those exist. */
 export function generate(G,P){
   const rnd=mulberry32(((P.seed|0)>>>0)||1);
   const pick=a=>a[Math.floor(rnd()*a.length)];
@@ -14,56 +17,27 @@ export function generate(G,P){
     }
   }
   const ch=chambers(L), adj=adjacency(L,ch);
-  const total=ch.list.length, ac=Math.round(P.activeCount||0);
-  const tgt={left:[P.B,P.H/2],right:[P.W-P.B,P.H/2],top:[P.W/2,P.B],bottom:[P.W/2,P.H-P.B],center:[P.W/2,P.H/2]}[P.growFrom]||[P.W/2,P.H/2];
-  const portCh=new Set(portCells(G,P).map(p=>ch.id[p.cell[0]][p.cell[1]]));
-  function growRegion(){
-    if(!(ac>0&&ac<total))return new Set(ch.list.map(c=>c.id));
-    let best=null,bd=1e18;
-    for(const c of ch.list){
-      if(P.growFrom!=='center'&&portCh.size&&!portCh.has(c.id))continue;
-      const [x,y]=chamberCenter(G,c);const d=(x-tgt[0])**2+(y-tgt[1])**2;if(d<bd){bd=d;best=c.id;}
+  const ids=ch.list.map(c=>c.id);
+  // spanning tree with at most 3 tunnels per chamber, relaxed only if that proves impossible
+  let deg=new Map(),done=false;
+  for(let attempt=0;attempt<60&&!done;attempt++){
+    const cap=attempt>=50?99:3;
+    for(let j=0;j<=G.rows;j++)L.H[j].fill('solid');
+    for(let r=0;r<G.rows;r++)L.V[r].fill('solid');
+    deg=new Map(ids.map(i=>[i,0]));
+    const inT=new Set([pick(ids)]);
+    while(inT.size<ids.length){
+      const cand=[];
+      for(const a of inT){if(deg.get(a)>=cap)continue;for(const [b,es] of adj.get(a))if(!inT.has(b)&&deg.get(b)<cap)cand.push([a,b,es]);}
+      if(!cand.length)break;
+      const [a,b,es]=pick(cand);setEdge(L,pick(es),'tunnel');
+      deg.set(a,deg.get(a)+1);deg.set(b,deg.get(b)+1);inT.add(b);
     }
-    const set=new Set([best]);
-    while(set.size<ac){
-      const front=[];for(const a of set)for(const b of adj.get(a).keys())if(!set.has(b))front.push(b);
-      if(!front.length)break;set.add(pick(front));
-    }
-    // make sure the active area reaches at least one port: add the shortest path to one
-    if(portCh.size&&![...set].some(id=>portCh.has(id))){
-      const prev=new Map(),q=[...set];for(const a of q)prev.set(a,null);
-      let hit=null;
-      while(q.length&&hit===null){const a=q.shift();for(const b of adj.get(a).keys())if(!prev.has(b)){prev.set(b,a);if(portCh.has(b)){hit=b;break;}q.push(b);}}
-      for(let x=hit;x!==null&&x!==undefined&&!set.has(x);x=prev.get(x))set.add(x);
-    }
-    return set;
+    if(inT.size===ids.length)done=true;
   }
-  // spanning tree with at most 3 tunnels per chamber; regrow the active area if that is impossible
-  let activeSet,ids,deg=new Map(),done=false;
-  for(let region=0;region<40&&!done;region++){
-    activeSet=growRegion();ids=[...activeSet];
-    const last=region===39;
-    for(let attempt=0;attempt<(last?30:15)&&!done;attempt++){
-      const cap=(last&&attempt>=20)?99:3;
-      for(let j=0;j<=G.rows;j++)L.H[j].fill('solid');
-      for(let r=0;r<G.rows;r++)L.V[r].fill('solid');
-      deg=new Map(ids.map(i=>[i,0]));
-      const inT=new Set([pick(ids)]);
-      while(inT.size<ids.length){
-        const cand=[];
-        for(const a of inT){if(deg.get(a)>=cap)continue;for(const [b,es] of adj.get(a))if(activeSet.has(b)&&!inT.has(b)&&deg.get(b)<cap)cand.push([a,b,es]);}
-        if(!cand.length)break;
-        const [a,b,es]=pick(cand);setEdge(L,pick(es),'tunnel');
-        deg.set(a,deg.get(a)+1);deg.set(b,deg.get(b)+1);inT.add(b);
-      }
-      if(inT.size===ids.length)done=true;
-    }
-  }
-  for(let r=0;r<G.rows;r++)L.active[r].fill(true);
-  for(const c of ch.list)if(!activeSet.has(c.id))for(const [r,cc] of c.cells)L.active[r][cc]=false;
   // extra loops
   const extra=Math.round(Math.max(0,P.loops||0)*ids.length);
-  const pairs=[];for(const a of ids)for(const [b,es] of adj.get(a))if(a<b&&activeSet.has(b))pairs.push([a,b,es]);
+  const pairs=[];for(const a of ids)for(const [b,es] of adj.get(a))if(a<b)pairs.push([a,b,es]);
   shuffle(pairs,rnd);let added=0;
   for(const [a,b,es] of pairs){
     if(added>=extra)break;
@@ -71,29 +45,78 @@ export function generate(G,P){
     if(es.some(e=>getEdge(L,e)==='tunnel'))continue;
     setEdge(L,pick(es),'tunnel');deg.set(a,deg.get(a)+1);deg.set(b,deg.get(b)+1);added++;
   }
-  // sponges
-  const nS=Math.max(0,Math.round(P.sponges||0));
-  if(nS>0){
-    const cand=[];
-    for(const e of interiorEdges(L,ch)){
-      if(!activeSet.has(e.a)||!activeSet.has(e.b))continue;
-      if(getEdge(L,e)!=='solid')continue;
-      if(spongeLength(P,G)<8)continue;
-      let mx,my;
-      if(e.type==='H'){mx=(G.xs[e.k]+G.xs[e.k+1])/2;my=G.ys[e.j];}else{mx=G.xs[e.i];my=(G.ys[e.r]+G.ys[e.r+1])/2;}
-      const u=(mx-P.B)/G.innerW,v=(my-P.B)/G.innerH;
-      const base={left:1-u,right:u,top:1-v,bottom:v,none:0.5}[P.dampSide]??0.5;
-      cand.push({e,score:base+rnd()*(P.dampSide==='none'?1:0.25)});
-    }
-    cand.sort((x,y)=>y.score-x.score);
-    const sc=new Map();let placed=0;
-    for(const {e} of cand){
-      if(placed>=nS)break;
-      if((sc.get(e.a)||0)>=2||(sc.get(e.b)||0)>=2)continue;
-      setEdge(L,e,'sponge');sc.set(e.a,(sc.get(e.a)||0)+1);sc.set(e.b,(sc.get(e.b)||0)+1);placed++;
-    }
-  }
+  // starting area, grown along tunnels
+  const start=startArea(G,P,L,ch,rnd,pick);
+  for(let r=0;r<G.rows;r++)L.active[r].fill(true);
+  for(const c of ch.list)if(!start.has(c.id))for(const [r,cc] of c.cells)L.active[r][cc]=false;
+  placeSponges(G,P,L,ch,start,rnd);
   return L;
+}
+
+function tunnelGraph(L,ch){
+  const g=new Map(ch.list.map(c=>[c.id,new Set()]));
+  for(const e of interiorEdges(L,ch))if(getEdge(L,e)==='tunnel'){g.get(e.a).add(e.b);g.get(e.b).add(e.a);}
+  return g;
+}
+// shortest path along tunnels from the set to any target; returns the ids to add
+function pathTo(g,set,targets){
+  const prev=new Map(),q=[...set];for(const a of q)prev.set(a,null);
+  while(q.length){
+    const a=q.shift();
+    if(targets.has(a)){const out=[];for(let x=a;x!==null&&!set.has(x);x=prev.get(x))out.push(x);return out;}
+    for(const b of g.get(a))if(!prev.has(b)){prev.set(b,a);q.push(b);}
+  }
+  return null;
+}
+function startArea(G,P,L,ch,rnd,pick){
+  const total=ch.list.length,ac=Math.round(P.activeCount||0);
+  if(!(ac>0&&ac<total))return new Set(ch.list.map(c=>c.id));
+  const g=tunnelGraph(L,ch);
+  const tgt={left:[P.B,P.H/2],right:[P.W-P.B,P.H/2],top:[P.W/2,P.B],bottom:[P.W/2,P.H-P.B],center:[P.W/2,P.H/2]}[P.growFrom]||[P.W/2,P.H/2];
+  const dist=c=>{const [x,y]=chamberCenter(G,c);return (x-tgt[0])**2+(y-tgt[1])**2;};
+  const portCh=new Set(portCells(G,P).map(p=>ch.id[p.cell[0]][p.cell[1]]));
+  const pool=P.growFrom!=='center'&&portCh.size?ch.list.filter(c=>portCh.has(c.id)):ch.list;
+  const seed=pool.slice().sort((a,b)=>dist(a)-dist(b))[0];
+  const set=new Set([seed.id]);
+  const addPath=t=>{const p=pathTo(g,set,t);if(p)for(const x of p)set.add(x);};
+  if(portCh.size&&!portCh.has(seed.id))addPath(portCh);
+  const brood=ch.list.filter(c=>c.merged).sort((a,b)=>dist(a)-dist(b));
+  brood.forEach((b,i)=>{
+    if(set.has(b.id))return;
+    const p=pathTo(g,set,new Set([b.id]));
+    if(p&&(i===0||set.size+p.length<=ac))for(const x of p)set.add(x);
+  });
+  while(set.size<ac){
+    const front=[];for(const a of set)for(const b of g.get(a))if(!set.has(b))front.push(b);
+    if(!front.length)break;set.add(pick(front));
+  }
+  return set;
+}
+function placeSponges(G,P,L,ch,start,rnd){
+  const nS=Math.max(0,Math.round(P.sponges||0));
+  if(nS<=0||spongeLength(P,G)<8)return;
+  const cand=[];
+  for(const e of interiorEdges(L,ch)){
+    if(getEdge(L,e)!=='solid')continue;
+    let mx,my;
+    if(e.type==='H'){mx=(G.xs[e.k]+G.xs[e.k+1])/2;my=G.ys[e.j];}else{mx=G.xs[e.i];my=(G.ys[e.r]+G.ys[e.r+1])/2;}
+    const u=(mx-P.B)/G.innerW,v=(my-P.B)/G.innerH;
+    const base={left:1-u,right:u,top:1-v,bottom:v,none:0.5}[P.dampSide]??0.5;
+    const inStart=(start.has(e.a)?1:0)+(start.has(e.b)?1:0);
+    cand.push({e,inStart,score:base+rnd()*(P.dampSide==='none'?1:0.25)});
+  }
+  cand.sort((x,y)=>y.score-x.score);
+  const sc=new Map();let placed=0;
+  const put=e=>{setEdge(L,e,'sponge');sc.set(e.a,(sc.get(e.a)||0)+1);sc.set(e.b,(sc.get(e.b)||0)+1);placed++;};
+  // the starting area always gets water first, ideally on a wall with both sides open
+  const first=cand.find(c=>c.inStart===2)||cand.find(c=>c.inStart===1);
+  if(first)put(first.e);
+  for(const {e} of cand){
+    if(placed>=nS)break;
+    if(getEdge(L,e)!=='solid')continue;
+    if((sc.get(e.a)||0)>=2||(sc.get(e.b)||0)>=2)continue;
+    put(e);
+  }
 }
 // port positions and the cell each one lands in (ignores ports that sit on a grid line)
 export function portCells(G,P){

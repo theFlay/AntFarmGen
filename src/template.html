@@ -41,7 +41,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <body>
 <header>
   <h1>Ant nest panel generator</h1>
-  <div class="sub">v1: acrylic strip-wall nest panels for a CO2 laser. Wang-tile layout, shared walls, tab-and-slot assembly.</div>
+  <div class="sub">All-acrylic nest panels for a CO2 laser. Shared walls, tab-and-slot assembly, a door on every tunnel.</div>
 </header>
 <div class="wrap">
   <aside id="controls"></aside>
@@ -50,7 +50,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <div class="row tools" id="tools">
         <span>Edit:</span>
         <button data-tool="wall" class="on">Walls</button>
-        <button data-tool="cell">Chambers on/off</button>
+        <button data-tool="cell">Starting area</button>
         <button data-tool="merge">Brood 2x2</button>
         <button id="undo">Undo</button>
         <span style="flex:1"></span>
@@ -61,7 +61,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <div id="preview"></div>
       <div class="legend">
         <span><i class="sw" style="background:#e9d5a6"></i>Chamber</span>
-        <span><i class="sw" style="background:#8a8a86"></i>Inactive (sealed)</span>
+        <span><i class="sw" style="background:#8a8a86"></i>Behind closed doors</span>
+        <span><i class="sw" style="background:#e8933a"></i>Closed door</span>
         <span><i class="sw" style="background:#5b4fc4"></i>Wall strip</span>
         <span><i class="sw" style="background:#2fb37a"></i>Tunnel</span>
         <span><i class="sw" style="background:#4a90d9"></i>Sponge pocket</span>
@@ -75,6 +76,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <div class="msg info">Red = cut, black = engrave (change below). Kerf is already applied. Every file is drawn at 1:1 in millimetres.</div>
       <div class="row" id="exports" style="margin-top:6px"></div>
       <div class="row" style="margin-top:8px">
+        <button id="testPiece">Fit test piece (.svg)</button>
         <button id="saveLayout">Save layout (.json)</button>
         <button id="loadBtn">Load layout</button>
         <input type="file" id="loadLayout" accept=".json,application/json" hidden>

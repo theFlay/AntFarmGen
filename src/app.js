@@ -8,7 +8,7 @@ import {checkRules} from './rules.js';
 import {offsetPoly} from './offset.js';
 import {stripOutline} from './strip.js';
 import {drawTopdown} from './draw.js';
-import {exporters} from './export.js';
+import {exporters,testPiece} from './export.js';
 function buildForm(){
   const root=document.getElementById('controls');
   let html='';
@@ -54,7 +54,7 @@ function readParams(){
 let P,G,L,geo,rules,tool='wall',history=[];
 const TOOLHELP={
   wall:'Tap a wall to cycle solid, tunnel, sponge.',
-  cell:'Tap a chamber to switch it on or off. Off chambers are sealed and their tunnels close.',
+  cell:'Tap a chamber to add it to, or remove it from, the starting area. Everything is still cut; this only sets which doors start closed.',
   merge:'Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it.'
 };
 function snapshot(p=P){history.push(JSON.stringify({L,P:p}));if(history.length>60)history.shift();}
@@ -82,10 +82,10 @@ function render(){
   const st=[
     ['Grid',`${G.cols} x ${G.rows} cells`],['Cell size',`${f1(G.cellW)} x ${f1(G.cellH)} mm`],
     ['Chamber inside',`about ${f1(G.cellW-G.t)} x ${f1(G.cellH-G.t)} mm`],['Depth',`${f1(G.depth)} mm`],
-    ['Tunnels',`${f1(G.tunnelW)} wide x ${f1(G.tunnelH)} high`],['Chambers active',`${act.length} of ${geo.ch.list.length}`],
+    ['Tunnels',`${f1(G.tunnelW)} wide x ${f1(G.tunnelH)} high`],['Open at start',`${act.length} of ${geo.ch.list.length} chambers`],
     ['Tunnels / sponges',`${tunnels} / ${spongesN}`],['Strip parts',`${geo.pieces.length} (${f1(stripLen/1000)} m)`],
-    ['Strip stock sheets',`${ex.stripSheets} at ${P.stockW} x ${P.stockH}`],['Frame',`${geo.frame.length} pieces x ${P.layers} layers`],
-    ['Bolts',`${geo.bolts.length}`],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
+    ['Wall sheets',`${ex.stripSheets} at ${P.stockW} x ${P.stockH}`],['Frame',`${geo.frame.length} pieces x ${P.layers} layers`],
+    ['Doors',`${geo.doors.length} (${geo.doors.filter(d=>d.closed).length} start closed)`],['Fasteners',`${geo.fasteners.length} ${P.fastener==='peg'?'pegs and keys':P.fastener==='bolt'?'bolts':''}`],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
   ];
   document.getElementById('stats').innerHTML=st.map(([a,b])=>`<div><span>${a}:</span> ${b}</div>`).join('');
   document.getElementById('derived').textContent=`Pitch target ${f1(G.pitch)}mm, actual cells ${f1(G.cellW)} x ${f1(G.cellH)}mm, tunnels ${f1(G.tunnelW)}mm wide, depth ${f1(G.depth)}mm.${G.adjusted?' Cell count nudged so ports miss the walls.':''}`;
@@ -115,7 +115,6 @@ function onPreviewClick(ev){
     const ch=chambers(L),id=ch.id[r][c],cham=ch.list[id];
     const on=!cham.active;
     for(const [rr,cc] of cham.cells)L.active[rr][cc]=on;
-    if(!on)for(const e of interiorEdges(L,ch))if((e.a===id||e.b===id)&&getEdge(L,e)!=='solid')setEdge(L,e,'solid');
     render();return;
   }
   if(tool==='merge'){
@@ -179,6 +178,7 @@ function init(){
     }
     const f=div._files[+b.dataset.file];if(f)await saveFile(f.name,f.data);
   });
+  document.getElementById('testPiece').addEventListener('click',()=>{const f=testPiece(G,P);saveFile(f.name,f.data);});
   document.getElementById('saveLayout').addEventListener('click',()=>saveFile(`nest-layout-${P.W}x${P.H}.json`,layoutJSON()));
   const fi=document.getElementById('loadLayout');
   document.getElementById('loadBtn').addEventListener('click',()=>fi.click());
@@ -202,5 +202,5 @@ function init(){
   document.head.appendChild(s);
 }
 function layoutJSON(){return JSON.stringify({app:'ant-nest-panel-generator',version:1,params:P,layout:L},null,1);}
-window.__nest={get state(){return {P,G,L,geo,rules};},derive,generate,buildGeometry,checkRules,exporters,offsetPoly,stripOutline};
+window.__nest={get state(){return {P,G,L,geo,rules};},derive,generate,buildGeometry,checkRules,exporters,offsetPoly,stripOutline,testPiece};
 init();
