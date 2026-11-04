@@ -123,7 +123,9 @@ export function testPiece(G,P){
   const lab=(x,y,s)=>d.txt(x,y,s,2.4);
   // kerf comb: a 50mm block cut into 5. Measure the stack squeezed together.
   b.push(lab(32,4,'KERF: 5 x 10mm, measure stack'));
-  for(let i=0;i<5;i++)b.push(`<path d="${polyD(rectPts(7+i*10,7,17+i*10,17))}" fill="none" stroke="${P.cutColor}" stroke-width="0.01"/>`);
+  const line=`fill="none" stroke="${P.cutColor}" stroke-width="0.01"`;
+  b.push(`<path d="${polyD(rectPts(7,7,57,17))}" ${line}/>`);
+  for(let i=1;i<5;i++)b.push(`<path d="M${7+i*10} 7 L${7+i*10} 17" ${line}/>`);
   // tab fit plate
   b.push(lab(120,4,'TAB FIT: slot clearance'));
   b.push(d.outline(rectPts(70,7,165,27)));
@@ -132,13 +134,14 @@ export function testPiece(G,P){
     b.push(d.rect({x0:cx-P.tabL/2-c/2,x1:cx+P.tabL/2+c/2,y0:14-t/2-c/2,y1:14+t/2+c/2}));
     b.push(lab(cx,22,fmt(c)));
   });
-  // door fit plate: same door strip tried in slots of different fit
+  // door fit plate: one door body tried in slots with different gaps on every side
   b.push(lab(52,32,'DOOR FIT: per side'));
   b.push(d.outline(rectPts(5,35,100,55)));
   const fits=[0.05,0.1,0.15,0.2,0.25];
   fits.forEach((f,i)=>{
     const cx=15+i*18;
-    b.push(d.rect({x0:cx-G.tunnelW/2,x1:cx+G.tunnelW/2,y0:42-t/2-f,y1:42+t/2+f}));
+    const body=G.tunnelW-2*P.doorFit;
+    b.push(d.rect({x0:cx-body/2-f,x1:cx+body/2+f,y0:42-t/2-f,y1:42+t/2+f}));
     b.push(lab(cx,50,fmt(f)));
   });
   // sample wall strip with one tunnel and tabs, plus its door and saddle

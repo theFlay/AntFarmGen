@@ -21,7 +21,8 @@ const clickSvg=async(p,sel)=>{const b=await (await p.$(sel)).boundingBox();await
 const setField=(p,id,v)=>p.$eval('#'+id,(e,v)=>{e.value=v;e.dispatchEvent(new Event('change'));},String(v));
 // finds a cell that is outside every brood chamber and has room to merge
 const freeCell=p=>p.evaluate(()=>{const L=window.__nest.state.L;
-  for(let r=0;r<L.rows-1;r++)for(let c=0;c<L.cols-1;c++)if(!L.merges.some(m=>Math.abs(m.r-r)<2&&Math.abs(m.c-c)<2))return [r,c];return null;});
+  const used=(r,c)=>L.merges.some(m=>m.cells.some(([a,b])=>a===r&&b===c));
+  for(let r=0;r<L.rows-1;r++)for(let c=0;c<L.cols-1;c++)if(![[r,c],[r,c+1],[r+1,c],[r+1,c+1]].some(([a,b])=>used(a,b)))return [r,c];return null;});
 
 await check('wall tool cycles an edge and undo restores it',async p=>{
   const before=await Ljson(p);
@@ -38,10 +39,21 @@ await check('merge tool adds a brood chamber on a free cell',async p=>{
   assert.equal(await p.evaluate(()=>window.__nest.state.L.merges.length),n+1);
 });
 await check('merge tool splits an existing brood chamber',async p=>{
-  const m=await p.evaluate(()=>window.__nest.state.L.merges[0]);
+  const [r,c]=await p.evaluate(()=>window.__nest.state.L.merges[0].cells[0]);
   await p.click('[data-tool="merge"]');
-  await clickSvg(p,`[data-cell="${m.r},${m.c}"]`);
+  await clickSvg(p,`[data-cell="${r},${c}"]`);
   assert.equal(await p.evaluate(()=>window.__nest.state.L.merges.length),0);
+});
+await check('join tool joins two cells and splits them again',async p=>{
+  const [r,c]=await freeCell(p);
+  const n=await p.evaluate(()=>window.__nest.state.L.merges.length);
+  await p.click('[data-tool="join"]');
+  await clickSvg(p,`[data-cell="${r},${c}"]`);
+  await clickSvg(p,`[data-cell="${r},${c+1}"]`);
+  assert.equal(await p.evaluate(()=>window.__nest.state.L.merges.length),n+1);
+  await clickSvg(p,`[data-cell="${r},${c}"]`);
+  await clickSvg(p,`[data-cell="${r},${c}"]`);
+  assert.equal(await p.evaluate(()=>window.__nest.state.L.merges.length),n);
 });
 await check('export buttons are enabled when rules pass, disabled on an error',async p=>{
   assert.equal(await p.evaluate(()=>window.__nest.state.rules.ok),true);

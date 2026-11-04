@@ -1,7 +1,7 @@
 import {PARAMS,GEN_KEYS,ALL_FIELDS} from './params.js';
 import {f1} from './util.js';
 import {derive} from './grid.js';
-import {chambers,interiorEdges,getEdge,setEdge,mergeOf} from './layout.js';
+import {chambers,interiorEdges,getEdge,setEdge,mergeOf,broodCells,normalizeLayout} from './layout.js';
 import {generate} from './generate.js';
 import {buildGeometry} from './geometry.js';
 import {checkRules} from './rules.js';
@@ -51,11 +51,12 @@ function readParams(){
   return P;
 }
 /* ---------------- app state ---------------- */
-let P,G,L,geo,rules,tool='wall',history=[];
+let P,G,L,geo,rules,tool='wall',history=[],joinFrom=null;
 const TOOLHELP={
   wall:'Tap a wall to cycle solid, tunnel, sponge.',
   cell:'Tap a chamber to add it to, or remove it from, the starting area. Everything is still cut; this only sets which doors start closed.',
-  merge:'Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it.'
+  merge:'Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it.',
+  join:'Tap a cell, then a touching cell, to join their chambers. Tap the same cell twice to split it.'
 };
 function snapshot(p=P){history.push(JSON.stringify({L,P:p}));if(history.length>60)history.shift();}
 function regenerate(prev=P){if(L)snapshot(prev);G=derive(P);L=generate(G,P);}
@@ -117,14 +118,33 @@ function onPreviewClick(ev){
     for(const [rr,cc] of cham.cells)L.active[rr][cc]=on;
     render();return;
   }
+  if(tool==='join'){
+    if(!joinFrom){joinFrom=[r,c];setStatus('Now tap a touching cell, or the same cell to split.');return;}
+    const [a,b]=joinFrom;joinFrom=null;
+    if(a===r&&b===c){
+      const mi=mergeOf(L,r,c);
+      if(mi>=0){snapshot();L.merges.splice(mi,1);render();}else setStatus('');
+      return;
+    }
+    const ch=chambers(L),ca=ch.list[ch.id[a][b]],cb=ch.list[ch.id[r][c]];
+    if(ca.id===cb.id){setStatus('Those cells are already one chamber.');return;}
+    const touching=ca.cells.some(([x,y])=>cb.cells.some(([p,q])=>Math.abs(x-p)+Math.abs(y-q)===1));
+    if(!touching){setStatus('Those chambers do not touch.');return;}
+    snapshot();
+    const keep=[...ca.cells,...cb.cells];
+    L.merges=L.merges.filter((m,i)=>i!==mergeOf(L,a,b)&&i!==mergeOf(L,r,c));
+    L.merges.push({cells:keep,brood:ca.brood||cb.brood});
+    const on=ca.active&&cb.active;for(const [x,y] of keep)L.active[x][y]=on;
+    render();return;
+  }
   if(tool==='merge'){
     const mi=mergeOf(L,r,c);
     snapshot();
     if(mi>=0){L.merges.splice(mi,1);render();return;}
     if(L.cols<2||L.rows<2){history.pop();return;}
     const r0=Math.min(r,L.rows-2),c0=Math.min(c,L.cols-2);
-    if(L.merges.some(m=>Math.abs(m.r-r0)<2&&Math.abs(m.c-c0)<2)){history.pop();setStatus('That would overlap another brood chamber.');return;}
-    L.merges.push({r:r0,c:c0});
+    if(broodCells(r0,c0).some(([a,b])=>mergeOf(L,a,b)>=0)){history.pop();setStatus('That would overlap another joined chamber.');return;}
+    L.merges.push({cells:broodCells(r0,c0),brood:true});
     for(let dr=0;dr<2;dr++)for(let dc=0;dc<2;dc++)L.active[r0+dr][c0+dc]=true;
     render();
   }
@@ -157,7 +177,7 @@ function init(){
   render();
   document.getElementById('preview').addEventListener('click',onPreviewClick);
   document.querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>{
-    tool=b.dataset.tool;document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x===b));render();
+    tool=b.dataset.tool;joinFrom=null;document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x===b));render();
   }));
   document.getElementById('undo').addEventListener('click',()=>{if(!history.length){setStatus('Nothing to undo.');return;}const h=JSON.parse(history.pop());
     L=h.L;P=h.P;for(const f of ALL_FIELDS)setField(f,P[f.k]);render();});
@@ -192,7 +212,7 @@ function init(){
       if(l.cols!==g.cols||l.rows!==g.rows)throw new Error(`layout is ${l.cols} x ${l.rows} but these settings give ${g.cols} x ${g.rows}`);
       snapshot();
       for(const f of ALL_FIELDS)if(f.k in j.params)setField(f,j.params[f.k]);
-      P=readParams();L=l;render();setStatus('Loaded '+file.name+'.');
+      P=readParams();L=normalizeLayout(l);render();setStatus('Loaded '+file.name+'.');
     }catch(e){setStatus('Could not load: '+e.message);}
     fi.value='';
   });
@@ -201,6 +221,6 @@ function init(){
   s.onload=()=>render();s.onerror=()=>{};
   document.head.appendChild(s);
 }
-function layoutJSON(){return JSON.stringify({app:'ant-nest-panel-generator',version:1,params:P,layout:L},null,1);}
+function layoutJSON(){return JSON.stringify({app:'ant-nest-panel-generator',version:2,params:P,layout:L},null,1);}
 window.__nest={get state(){return {P,G,L,geo,rules};},derive,generate,buildGeometry,checkRules,exporters,offsetPoly,stripOutline,testPiece};
 init();

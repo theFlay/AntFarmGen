@@ -10,9 +10,17 @@ export function emptyLayout(cols,rows){
   for(let r=0;r<rows;r++) L.V.push(new Array(cols+1).fill('solid'));
   return L;
 }
-export const mergeOf=(L,r,c)=>L.merges.findIndex(m=>r>=m.r&&r<=m.r+1&&c>=m.c&&c<=m.c+1);
-export const hMerged=(L,j,k)=>L.merges.some(m=>j===m.r+1&&(k===m.c||k===m.c+1));
-export const vMerged=(L,r,i)=>L.merges.some(m=>i===m.c+1&&(r===m.r||r===m.r+1));
+// merges are groups of cells: {cells:[[r,c],...],brood:true|false}
+const inGroup=(m,r,c)=>m.cells.some(([a,b])=>a===r&&b===c);
+export const broodCells=(r,c)=>[[r,c],[r,c+1],[r+1,c],[r+1,c+1]];
+export const mergeOf=(L,r,c)=>L.merges.findIndex(m=>inGroup(m,r,c));
+// layouts saved by v1 stored each brood chamber as its top-left cell
+export function normalizeLayout(L){
+  L.merges=L.merges.map(m=>m.cells?m:{cells:broodCells(m.r,m.c),brood:true});
+  return L;
+}
+export const hMerged=(L,j,k)=>L.merges.some(m=>inGroup(m,j-1,k)&&inGroup(m,j,k));
+export const vMerged=(L,r,i)=>L.merges.some(m=>inGroup(m,r,i-1)&&inGroup(m,r,i));
 export const stH=(L,j,k)=>hMerged(L,j,k)?'none':L.H[j][k];
 export const stV=(L,r,i)=>vMerged(L,r,i)?'none':L.V[r][i];
 export const getEdge=(L,e)=>e.type==='H'?stH(L,e.j,e.k):stV(L,e.r,e.i);
@@ -21,7 +29,7 @@ export function setEdge(L,e,s){ if(e.type==='H') L.H[e.j][e.k]=s; else L.V[e.r][
 export function chambers(L){
   const id=[];let n=0;const list=[];
   for(let r=0;r<L.rows;r++){id.push([]);for(let c=0;c<L.cols;c++)id[r].push(-1);}
-  L.merges.forEach(m=>{const ch={id:n,cells:[],merged:true};for(let dr=0;dr<2;dr++)for(let dc=0;dc<2;dc++){id[m.r+dr][m.c+dc]=n;ch.cells.push([m.r+dr,m.c+dc]);}list.push(ch);n++;});
+  L.merges.forEach(m=>{const ch={id:n,cells:m.cells.map(c=>c.slice()),merged:true,brood:!!m.brood};for(const [r,c] of ch.cells)id[r][c]=n;list.push(ch);n++;});
   for(let r=0;r<L.rows;r++)for(let c=0;c<L.cols;c++)if(id[r][c]<0){id[r][c]=n;list.push({id:n,cells:[[r,c]],merged:false});n++;}
   for(const ch of list) ch.active=ch.cells.every(([r,c])=>L.active[r][c]);
   return {id,list};

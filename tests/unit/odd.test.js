@@ -28,7 +28,7 @@ test('odd chambers are connected shapes within the size limit',()=>{
 });
 test('no chamber leaks: every wall between two chambers is covered by strip or pocket',()=>{
   for(const cfg of CFGS)for(let seed=1;seed<=30;seed++){
-    const {geo,G,P}=run(cfg,seed);
+    const {geo,G,P}=run(Object.assign({},cfg,{sponges:0}),seed);
     const cov=(x,y)=>geo.pieces.some(p=>{const r=p.rect;return x>=r.x0-1e-6&&x<=r.x1+1e-6&&y>=r.y0-1e-6&&y<=r.y1+1e-6;});
     const id=geo.ch.id;
     for(let r=0;r<G.rows;r++)for(let c=0;c<G.cols;c++){
@@ -36,7 +36,7 @@ test('no chamber leaks: every wall between two chambers is covered by strip or p
         // sample along the shared wall, including right at both junctions
         for(const f of [0,0.25,0.75,1]){
           const y=G.ys[r]+(G.ys[r+1]-G.ys[r])*f;
-          assert.ok(cov(G.xs[c+1],y)||geo.sponges.length,`gap on V wall ${r},${c+1} seed ${seed}`);
+          assert.ok(cov(G.xs[c+1],y),`gap on V wall ${r},${c+1} seed ${seed}`);
         }
       }
     }

@@ -1,5 +1,5 @@
 import {mulberry32,shuffle} from './util.js';
-import {emptyLayout,chambers,adjacency,chamberCenter,interiorEdges,getEdge,setEdge} from './layout.js';
+import {emptyLayout,chambers,adjacency,chamberCenter,interiorEdges,getEdge,setEdge,broodCells,mergeOf} from './layout.js';
 
 /* Every chamber is built and joined up. The active setting only picks which doors start open,
    so the cut files do not depend on it. The starting area always holds a port, a sponge and
@@ -12,10 +12,11 @@ export function generate(G,P){
   if(G.cols>=2&&G.rows>=2){
     for(let n=0,tries=0;n<want&&tries<400;tries++){
       const r=Math.floor(rnd()*(G.rows-1)),c=Math.floor(rnd()*(G.cols-1));
-      if(L.merges.some(m=>Math.abs(m.r-r)<2&&Math.abs(m.c-c)<2))continue;
-      L.merges.push({r,c});n++;
+      if(broodCells(r,c).some(([a,b])=>mergeOf(L,a,b)>=0))continue;
+      L.merges.push({cells:broodCells(r,c),brood:true});n++;
     }
   }
+  growOddChambers(G,P,L,rnd);
   const ch=chambers(L), adj=adjacency(L,ch);
   const ids=ch.list.map(c=>c.id);
   // spanning tree with at most 3 tunnels per chamber, relaxed only if that proves impossible
@@ -53,6 +54,31 @@ export function generate(G,P){
   return L;
 }
 
+// Random region growing: joins free cells into chambers of 2 up to oddMax cells.
+function growOddChambers(G,P,L,rnd){
+  const share=Math.min(1,Math.max(0,P.oddShare||0)),maxC=Math.max(2,Math.round(P.oddMax||2));
+  if(share<=0)return;
+  const free=(r,c)=>r>=0&&c>=0&&r<G.rows&&c<G.cols&&mergeOf(L,r,c)<0;
+  const cells=[];for(let r=0;r<G.rows;r++)for(let c=0;c<G.cols;c++)cells.push([r,c]);
+  shuffle(cells,rnd);
+  let budget=Math.round(share*cells.filter(([r,c])=>free(r,c)).length);
+  for(const [r,c] of cells){
+    if(budget<2)break;
+    if(!free(r,c))continue;
+    const size=Math.min(budget,2+Math.floor(rnd()*(maxC-1)));
+    const group=[[r,c]];
+    const taken=(a,b)=>group.some(([x,y])=>x===a&&y===b);
+    while(group.length<size){
+      const front=[];
+      for(const [a,b] of group)for(const [x,y] of [[a-1,b],[a+1,b],[a,b-1],[a,b+1]])if(free(x,y)&&!taken(x,y))front.push([x,y]);
+      if(!front.length)break;
+      group.push(front[Math.floor(rnd()*front.length)]);
+    }
+    if(group.length<2)continue;
+    L.merges.push({cells:group,brood:false});budget-=group.length;
+  }
+}
+
 function tunnelGraph(L,ch){
   const g=new Map(ch.list.map(c=>[c.id,new Set()]));
   for(const e of interiorEdges(L,ch))if(getEdge(L,e)==='tunnel'){g.get(e.a).add(e.b);g.get(e.b).add(e.a);}
@@ -80,7 +106,7 @@ function startArea(G,P,L,ch,rnd,pick){
   const set=new Set([seed.id]);
   const addPath=t=>{const p=pathTo(g,set,t);if(p)for(const x of p)set.add(x);};
   if(portCh.size&&!portCh.has(seed.id))addPath(portCh);
-  const brood=ch.list.filter(c=>c.merged).sort((a,b)=>dist(a)-dist(b));
+  const brood=ch.list.filter(c=>c.brood).sort((a,b)=>dist(a)-dist(b));
   brood.forEach((b,i)=>{
     if(set.has(b.id))return;
     const p=pathTo(g,set,new Set([b.id]));

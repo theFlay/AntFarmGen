@@ -52,6 +52,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
         <button data-tool="wall" class="on">Walls</button>
         <button data-tool="cell">Starting area</button>
         <button data-tool="merge">Brood 2x2</button>
+        <button data-tool="join">Join cells</button>
         <button id="undo">Undo</button>
         <span style="flex:1"></span>
         <button id="reseed">New seed</button>
@@ -141,6 +142,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
     ["Auto layout", true, [
       { k: "seed", l: "Seed", d: 1234, step: 1 },
       { k: "brood", l: "Brood chambers (2x2)", d: 1, step: 1 },
+      { k: "oddShare", l: "Odd-shaped chambers (0 to 1)", d: 0, step: 0.05, h: "Share of cells joined into odd shapes like 1x2, L and T." },
+      { k: "oddMax", l: "Largest odd chamber (cells)", d: 4, step: 1 },
       { k: "activeCount", l: "Chambers open at the start (0 = all)", d: 0, step: 1, h: "Everything is cut either way. The rest start behind closed doors." },
       { k: "growFrom", l: "Starting area grows from", d: "left", opts: [["left", "Left"], ["right", "Right"], ["top", "Top"], ["bottom", "Bottom"], ["center", "Centre"]] },
       { k: "loops", l: "Extra loop tunnels (0 to 1)", d: 0.15, step: 0.05 },
@@ -155,7 +158,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       { k: "engraveIds", l: "Engrave part IDs", d: true, bool: true }
     ]]
   ];
-  var GEN_KEYS = /* @__PURE__ */ new Set(["seed", "brood", "activeCount", "growFrom", "loops", "sponges", "dampSide"]);
+  var GEN_KEYS = /* @__PURE__ */ new Set(["seed", "brood", "oddShare", "oddMax", "activeCount", "growFrom", "loops", "sponges", "dampSide"]);
   var ALL_FIELDS = PARAMS.flatMap((g) => g[2]);
 
   // src/util.js
@@ -228,9 +231,15 @@ button:disabled{opacity:.45;cursor:not-allowed}
     for (let r = 0; r < rows; r++) L2.V.push(new Array(cols + 1).fill("solid"));
     return L2;
   }
-  var mergeOf = (L2, r, c) => L2.merges.findIndex((m) => r >= m.r && r <= m.r + 1 && c >= m.c && c <= m.c + 1);
-  var hMerged = (L2, j, k) => L2.merges.some((m) => j === m.r + 1 && (k === m.c || k === m.c + 1));
-  var vMerged = (L2, r, i) => L2.merges.some((m) => i === m.c + 1 && (r === m.r || r === m.r + 1));
+  var inGroup = (m, r, c) => m.cells.some(([a, b]) => a === r && b === c);
+  var broodCells = (r, c) => [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
+  var mergeOf = (L2, r, c) => L2.merges.findIndex((m) => inGroup(m, r, c));
+  function normalizeLayout(L2) {
+    L2.merges = L2.merges.map((m) => m.cells ? m : { cells: broodCells(m.r, m.c), brood: true });
+    return L2;
+  }
+  var hMerged = (L2, j, k) => L2.merges.some((m) => inGroup(m, j - 1, k) && inGroup(m, j, k));
+  var vMerged = (L2, r, i) => L2.merges.some((m) => inGroup(m, r, i - 1) && inGroup(m, r, i));
   var stH = (L2, j, k) => hMerged(L2, j, k) ? "none" : L2.H[j][k];
   var stV = (L2, r, i) => vMerged(L2, r, i) ? "none" : L2.V[r][i];
   var getEdge = (L2, e) => e.type === "H" ? stH(L2, e.j, e.k) : stV(L2, e.r, e.i);
@@ -247,11 +256,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
       for (let c = 0; c < L2.cols; c++) id[r].push(-1);
     }
     L2.merges.forEach((m) => {
-      const ch = { id: n, cells: [], merged: true };
-      for (let dr = 0; dr < 2; dr++) for (let dc = 0; dc < 2; dc++) {
-        id[m.r + dr][m.c + dc] = n;
-        ch.cells.push([m.r + dr, m.c + dc]);
-      }
+      const ch = { id: n, cells: m.cells.map((c) => c.slice()), merged: true, brood: !!m.brood };
+      for (const [r, c] of ch.cells) id[r][c] = n;
       list.push(ch);
       n++;
     });
@@ -304,11 +310,12 @@ button:disabled{opacity:.45;cursor:not-allowed}
     if (G2.cols >= 2 && G2.rows >= 2) {
       for (let n = 0, tries = 0; n < want && tries < 400; tries++) {
         const r = Math.floor(rnd() * (G2.rows - 1)), c = Math.floor(rnd() * (G2.cols - 1));
-        if (L2.merges.some((m) => Math.abs(m.r - r) < 2 && Math.abs(m.c - c) < 2)) continue;
-        L2.merges.push({ r, c });
+        if (broodCells(r, c).some(([a, b]) => mergeOf(L2, a, b) >= 0)) continue;
+        L2.merges.push({ cells: broodCells(r, c), brood: true });
         n++;
       }
     }
+    growOddChambers(G2, P2, L2, rnd);
     const ch = chambers(L2), adj = adjacency(L2, ch);
     const ids = ch.list.map((c) => c.id);
     let deg = /* @__PURE__ */ new Map(), done = false;
@@ -353,6 +360,31 @@ button:disabled{opacity:.45;cursor:not-allowed}
     placeSponges(G2, P2, L2, ch, start, rnd);
     return L2;
   }
+  function growOddChambers(G2, P2, L2, rnd) {
+    const share = Math.min(1, Math.max(0, P2.oddShare || 0)), maxC = Math.max(2, Math.round(P2.oddMax || 2));
+    if (share <= 0) return;
+    const free = (r, c) => r >= 0 && c >= 0 && r < G2.rows && c < G2.cols && mergeOf(L2, r, c) < 0;
+    const cells = [];
+    for (let r = 0; r < G2.rows; r++) for (let c = 0; c < G2.cols; c++) cells.push([r, c]);
+    shuffle(cells, rnd);
+    let budget = Math.round(share * cells.filter(([r, c]) => free(r, c)).length);
+    for (const [r, c] of cells) {
+      if (budget < 2) break;
+      if (!free(r, c)) continue;
+      const size = Math.min(budget, 2 + Math.floor(rnd() * (maxC - 1)));
+      const group = [[r, c]];
+      const taken = (a, b) => group.some(([x, y]) => x === a && y === b);
+      while (group.length < size) {
+        const front = [];
+        for (const [a, b] of group) for (const [x, y] of [[a - 1, b], [a + 1, b], [a, b - 1], [a, b + 1]]) if (free(x, y) && !taken(x, y)) front.push([x, y]);
+        if (!front.length) break;
+        group.push(front[Math.floor(rnd() * front.length)]);
+      }
+      if (group.length < 2) continue;
+      L2.merges.push({ cells: group, brood: false });
+      budget -= group.length;
+    }
+  }
   function tunnelGraph(L2, ch) {
     const g = new Map(ch.list.map((c) => [c.id, /* @__PURE__ */ new Set()]));
     for (const e of interiorEdges(L2, ch)) if (getEdge(L2, e) === "tunnel") {
@@ -396,7 +428,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       if (p) for (const x of p) set.add(x);
     };
     if (portCh.size && !portCh.has(seed.id)) addPath(portCh);
-    const brood = ch.list.filter((c) => c.merged).sort((a, b) => dist(a) - dist(b));
+    const brood = ch.list.filter((c) => c.brood).sort((a, b) => dist(a) - dist(b));
     brood.forEach((b, i) => {
       if (set.has(b.id)) return;
       const p = pathTo(g, set, /* @__PURE__ */ new Set([b.id]));
@@ -780,9 +812,12 @@ button:disabled{opacity:.45;cursor:not-allowed}
     }
     const vents = [];
     const vg = Math.max(0, Math.round(P2.ventGrid || 0)), vp = Math.max(P2.ventD * 3, 4);
-    if (vg > 0) for (const c of ch.list) {
-      const [cx, cy] = chamberCenter(G2, c);
+    const ventAt = ([cx, cy]) => {
       for (let a = 0; a < vg; a++) for (let b = 0; b < vg; b++) vents.push({ x: cx + (a - (vg - 1) / 2) * vp, y: cy + (b - (vg - 1) / 2) * vp });
+    };
+    if (vg > 0) for (const c of ch.list) {
+      if (c.merged && !c.brood) for (const [r, cc] of c.cells) ventAt([(xs[cc] + xs[cc + 1]) / 2, (ys[r] + ys[r + 1]) / 2]);
+      else ventAt(chamberCenter(G2, c));
     }
     if (depth <= 0) errors.push("Depth must be above 0.");
     if (tunnelH >= depth - 1) errors.push(`Tunnel height ${f1(tunnelH)}mm leaves no bridge above it (depth ${f1(depth)}mm).`);
@@ -922,7 +957,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       bad.add(c.id);
     }
     if (sp) msgs.push(["error", `${sp} chamber(s) have more than 2 sponges.`]);
-    const brood = ch.list.filter((c) => c.merged);
+    const brood = ch.list.filter((c) => c.brood);
     if (brood.length && !brood.some((c) => c.active)) msgs.push(["error", "The starting area has no brood chamber."]);
     const wantS = Math.max(0, Math.round(P2.sponges || 0));
     if (wantS > 0 && spongeLength(P2, G2) >= 8) {
@@ -1256,7 +1291,7 @@ ${body}
       b.push(...socketCuts(G2, geo2, d, sockTab));
       if (vents) for (const v of geo2.vents) b.push(d.hole(v.x, v.y, P2.ventD));
       if (fillOn(side)) for (const f of geo2.fills) b.push(d.hole(f.x, f.y, P2.fillD));
-      if (P2.engraveIds) b.push(d.txt(W / 2, P2.B / 2, label, Math.min(4, P2.B * 0.35)));
+      if (P2.engraveIds) b.push(d.txt(W / 2, Math.min(3, P2.B * 0.2), label, Math.min(3, P2.B * 0.2)));
       files.push({ name, data: svgDoc(W, H, b.join("\n"), label) });
     }
     const flat = P2.orient === "flat";
@@ -1331,7 +1366,9 @@ ${body}
     const W = 170, H = 120;
     const lab = (x, y, s) => d.txt(x, y, s, 2.4);
     b.push(lab(32, 4, "KERF: 5 x 10mm, measure stack"));
-    for (let i = 0; i < 5; i++) b.push(`<path d="${polyD(rectPts(7 + i * 10, 7, 17 + i * 10, 17))}" fill="none" stroke="${P2.cutColor}" stroke-width="0.01"/>`);
+    const line = `fill="none" stroke="${P2.cutColor}" stroke-width="0.01"`;
+    b.push(`<path d="${polyD(rectPts(7, 7, 57, 17))}" ${line}/>`);
+    for (let i = 1; i < 5; i++) b.push(`<path d="M${7 + i * 10} 7 L${7 + i * 10} 17" ${line}/>`);
     b.push(lab(120, 4, "TAB FIT: slot clearance"));
     b.push(d.outline(rectPts(70, 7, 165, 27)));
     [-0.1, -0.05, 0, 0.05, 0.1].forEach((c, i) => {
@@ -1344,7 +1381,8 @@ ${body}
     const fits = [0.05, 0.1, 0.15, 0.2, 0.25];
     fits.forEach((f, i) => {
       const cx = 15 + i * 18;
-      b.push(d.rect({ x0: cx - G2.tunnelW / 2, x1: cx + G2.tunnelW / 2, y0: 42 - t / 2 - f, y1: 42 + t / 2 + f }));
+      const body = G2.tunnelW - 2 * P2.doorFit;
+      b.push(d.rect({ x0: cx - body / 2 - f, x1: cx + body / 2 + f, y0: 42 - t / 2 - f, y1: 42 + t / 2 + f }));
       b.push(lab(cx, 50, fmt(f)));
     });
     const len = 50, pc = { s: 0, e: len, top: [9, len - 9], bot: [9, len - 9], notches: [len / 2] };
@@ -1432,10 +1470,12 @@ ${body}
   var rules;
   var tool = "wall";
   var history = [];
+  var joinFrom = null;
   var TOOLHELP = {
     wall: "Tap a wall to cycle solid, tunnel, sponge.",
     cell: "Tap a chamber to add it to, or remove it from, the starting area. Everything is still cut; this only sets which doors start closed.",
-    merge: "Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it."
+    merge: "Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it.",
+    join: "Tap a cell, then a touching cell, to join their chambers. Tap the same cell twice to split it."
   };
   function snapshot(p = P) {
     history.push(JSON.stringify({ L, P: p }));
@@ -1524,6 +1564,42 @@ ${body}
       render();
       return;
     }
+    if (tool === "join") {
+      if (!joinFrom) {
+        joinFrom = [r, c];
+        setStatus("Now tap a touching cell, or the same cell to split.");
+        return;
+      }
+      const [a, b] = joinFrom;
+      joinFrom = null;
+      if (a === r && b === c) {
+        const mi = mergeOf(L, r, c);
+        if (mi >= 0) {
+          snapshot();
+          L.merges.splice(mi, 1);
+          render();
+        } else setStatus("");
+        return;
+      }
+      const ch = chambers(L), ca = ch.list[ch.id[a][b]], cb = ch.list[ch.id[r][c]];
+      if (ca.id === cb.id) {
+        setStatus("Those cells are already one chamber.");
+        return;
+      }
+      const touching = ca.cells.some(([x, y]) => cb.cells.some(([p, q]) => Math.abs(x - p) + Math.abs(y - q) === 1));
+      if (!touching) {
+        setStatus("Those chambers do not touch.");
+        return;
+      }
+      snapshot();
+      const keep = [...ca.cells, ...cb.cells];
+      L.merges = L.merges.filter((m, i) => i !== mergeOf(L, a, b) && i !== mergeOf(L, r, c));
+      L.merges.push({ cells: keep, brood: ca.brood || cb.brood });
+      const on = ca.active && cb.active;
+      for (const [x, y] of keep) L.active[x][y] = on;
+      render();
+      return;
+    }
     if (tool === "merge") {
       const mi = mergeOf(L, r, c);
       snapshot();
@@ -1537,12 +1613,12 @@ ${body}
         return;
       }
       const r0 = Math.min(r, L.rows - 2), c0 = Math.min(c, L.cols - 2);
-      if (L.merges.some((m) => Math.abs(m.r - r0) < 2 && Math.abs(m.c - c0) < 2)) {
+      if (broodCells(r0, c0).some(([a, b]) => mergeOf(L, a, b) >= 0)) {
         history.pop();
-        setStatus("That would overlap another brood chamber.");
+        setStatus("That would overlap another joined chamber.");
         return;
       }
-      L.merges.push({ r: r0, c: c0 });
+      L.merges.push({ cells: broodCells(r0, c0), brood: true });
       for (let dr = 0; dr < 2; dr++) for (let dc = 0; dc < 2; dc++) L.active[r0 + dr][c0 + dc] = true;
       render();
     }
@@ -1586,6 +1662,7 @@ ${body}
     document.getElementById("preview").addEventListener("click", onPreviewClick);
     document.querySelectorAll("[data-tool]").forEach((b) => b.addEventListener("click", () => {
       tool = b.dataset.tool;
+      joinFrom = null;
       document.querySelectorAll("[data-tool]").forEach((x) => x.classList.toggle("on", x === b));
       render();
     }));
@@ -1649,7 +1726,7 @@ ${body}
         snapshot();
         for (const f of ALL_FIELDS) if (f.k in j.params) setField(f, j.params[f.k]);
         P = readParams();
-        L = l;
+        L = normalizeLayout(l);
         render();
         setStatus("Loaded " + file.name + ".");
       } catch (e) {
@@ -1665,7 +1742,7 @@ ${body}
     document.head.appendChild(s);
   }
   function layoutJSON() {
-    return JSON.stringify({ app: "ant-nest-panel-generator", version: 1, params: P, layout: L }, null, 1);
+    return JSON.stringify({ app: "ant-nest-panel-generator", version: 2, params: P, layout: L }, null, 1);
   }
   window.__nest = { get state() {
     return { P, G, L, geo, rules };

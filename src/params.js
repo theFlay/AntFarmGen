@@ -51,6 +51,8 @@ export const PARAMS=[
  ['Auto layout',true,[
   {k:'seed',l:'Seed',d:1234,step:1},
   {k:'brood',l:'Brood chambers (2x2)',d:1,step:1},
+  {k:'oddShare',l:'Odd-shaped chambers (0 to 1)',d:0,step:0.05,h:'Share of cells joined into odd shapes like 1x2, L and T.'},
+  {k:'oddMax',l:'Largest odd chamber (cells)',d:4,step:1},
   {k:'activeCount',l:'Chambers open at the start (0 = all)',d:0,step:1,h:'Everything is cut either way. The rest start behind closed doors.'},
   {k:'growFrom',l:'Starting area grows from',d:'left',opts:[['left','Left'],['right','Right'],['top','Top'],['bottom','Bottom'],['center','Centre']]},
   {k:'loops',l:'Extra loop tunnels (0 to 1)',d:0.15,step:0.05},
@@ -65,5 +67,5 @@ export const PARAMS=[
   {k:'engraveIds',l:'Engrave part IDs',d:true,bool:true},
  ]],
 ];
-export const GEN_KEYS=new Set(['seed','brood','activeCount','growFrom','loops','sponges','dampSide']);
+export const GEN_KEYS=new Set(['seed','brood','oddShare','oddMax','activeCount','growFrom','loops','sponges','dampSide']);
 export const ALL_FIELDS=PARAMS.flatMap(g=>g[2]);

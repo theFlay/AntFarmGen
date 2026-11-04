@@ -213,9 +213,11 @@ export function buildGeometry(G,L,P){
   // air vents
   const vents=[];
   const vg=Math.max(0,Math.round(P.ventGrid||0)), vp=Math.max(P.ventD*3,4);
+  const ventAt=([cx,cy])=>{for(let a=0;a<vg;a++)for(let b=0;b<vg;b++)vents.push({x:cx+(a-(vg-1)/2)*vp,y:cy+(b-(vg-1)/2)*vp});};
+  // a brood chamber is a clear square; odd shapes get vents per cell, because their centre can fall on a wall
   if(vg>0)for(const c of ch.list){
-    const [cx,cy]=chamberCenter(G,c);
-    for(let a=0;a<vg;a++)for(let b=0;b<vg;b++)vents.push({x:cx+(a-(vg-1)/2)*vp,y:cy+(b-(vg-1)/2)*vp});
+    if(c.merged&&!c.brood)for(const [r,cc] of c.cells)ventAt([(xs[cc]+xs[cc+1])/2,(ys[r]+ys[r+1])/2]);
+    else ventAt(chamberCenter(G,c));
   }
   // sanity checks
   if(depth<=0)errors.push('Depth must be above 0.');

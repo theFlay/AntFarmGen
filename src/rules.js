@@ -42,7 +42,7 @@ export function checkRules(G,L,P,geo){
   }
   let sp=0;for(const c of ch.list)if(spc.get(c.id)>2){sp++;bad.add(c.id);}
   if(sp)msgs.push(['error',`${sp} chamber(s) have more than 2 sponges.`]);
-  const brood=ch.list.filter(c=>c.merged);
+  const brood=ch.list.filter(c=>c.brood);
   if(brood.length&&!brood.some(c=>c.active))msgs.push(['error','The starting area has no brood chamber.']);
   const wantS=Math.max(0,Math.round(P.sponges||0));
   if(wantS>0&&spongeLength(P,G)>=8){

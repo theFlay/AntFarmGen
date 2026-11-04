@@ -117,6 +117,17 @@ test('all parts land on the stock sheets',()=>{
       }
   }
 });
+test('test piece door slots really change the side gap, and no line is cut twice',()=>{
+  const r=run();
+  const data=testPiece(r.G,r.P).data;
+  const ds=[...data.matchAll(/<path d="([^"]+)"/g)].map(m=>m[1]);
+  assert.equal(new Set(ds).size,ds.length,'duplicate path');
+  const k2=r.P.kerf/2,body=r.G.tunnelW-2*r.P.doorFit;
+  for(const f of [0.05,0.25]){
+    const want=(body+2*f-2*k2).toFixed(3);
+    assert.ok(ds.some(d=>{const n=[...d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map(q=>+q[1]);return (Math.max(...n)-Math.min(...n)).toFixed(3)===want;}),`no slot for fit ${f}`);
+  }
+});
 test('test piece exports cleanly and fits its sheet',()=>{
   const r=run();
   const f=testPiece(r.G,r.P);

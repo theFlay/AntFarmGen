@@ -37,7 +37,7 @@ test('more than 2 sponges in a chamber is an error',()=>{
 });
 test('a starting area with no brood chamber is an error',()=>{
   const e=edited({activeCount:8,brood:1},(L,r)=>{
-    for(const m of L.merges)for(let a=0;a<2;a++)for(let b=0;b<2;b++)L.active[m.r+a][m.c+b]=false;
+    for(const m of L.merges)for(const [a,b] of m.cells)L.active[a][b]=false;
   });
   assert.match(e,/no brood chamber/);
 });
