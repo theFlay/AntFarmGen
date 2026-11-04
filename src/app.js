@@ -12,6 +12,7 @@ import {exporters,testPiece} from './export.js';
 import {portCells} from './generate.js';
 import {cleanLayout,cleanParam,escapeHtml} from './sanitize.js';
 import JSZip from 'jszip';
+import {RACK_FIELDS,buildRack,rackFiles,rackHoleTest,rackPreview,rackDefaults} from './rack.js';
 function buildForm(){
   const root=document.getElementById('controls');
   let html='';
@@ -100,8 +101,8 @@ function render(){
   document.getElementById('stats').innerHTML=st.map(([a,b])=>`<div${a.startsWith('Ports that')?' class="wide"':''}><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
   document.getElementById('derived').textContent=`Pitch target ${f1(G.pitch)}mm, actual cells ${f1(G.cellW)} x ${f1(G.cellH)}mm, tunnels ${f1(G.tunnelW)}mm wide, depth ${f1(G.depth)}mm.${G.adjusted?' Cell count nudged so ports miss the walls.':''}`;
   const exDiv=document.getElementById('exports');
-  exDiv.innerHTML=`<button id="zipAll" class="primary"${rules.ok?'':' disabled'}>Download everything (.zip)</button>`+
-    ex.files.map((f,i)=>`<button data-file="${i}"${rules.ok?'':' disabled'}>${f.name}</button>`).join('');
+  setButtons(exDiv,`<button id="zipAll" class="primary"${rules.ok?'':' disabled'}>Download everything (.zip)</button>`+
+    ex.files.map((f,i)=>`<button data-file="${i}"${rules.ok?'':' disabled'}>${f.name}</button>`).join(''));
   const errs=rules.msgs.filter(m=>m[0]==='error').length,warns=rules.msgs.filter(m=>m[0]==='warn').length;
   const pill=document.getElementById('pill');
   pill.className='pill '+(errs?'bad':warns?'warn':'good');
@@ -115,7 +116,10 @@ function lineUp(){
   const by={};for(const p of portCells(G,P))(by[p.side]=by[p.side]||[]).push(p.pos);
   return Object.entries(by).map(([s,v])=>`${s} ${v.join(', ')}`).join('; ')||'none';
 }
-function setStatus(s){document.getElementById('status').textContent=s;}
+// Only rebuilds buttons when they really change. Rebuilding between a mouse press and release
+// would lose the click, which happened when typing a value and clicking download straight away.
+function setButtons(el,html){if(el._html!==html){el.innerHTML=html;el._html=html;}}
+function setStatus(s){document.getElementById('status').textContent=s;const r=document.getElementById('rackStatus');if(r)r.textContent=s;}
 
 /* ---------------- editing ---------------- */
 function onPreviewClick(ev){
@@ -248,11 +252,72 @@ async function saveFile(name,data){
 }
 
 /* ---------------- wiring ---------------- */
+/* ---------------- test tube rack ---------------- */
+let rackState=rackDefaults(),rackFilesNow=[];
+function buildRackForm(){
+  let html='<div class="group"><details open><summary>Tubes and rack</summary>';
+  for(const f of RACK_FIELDS){
+    let input;
+    if(f.opts)input=`<select id="r_${f.k}">${f.opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
+    else if(f.bool)input=`<input type="checkbox" id="r_${f.k}">`;
+    else input=`<input type="number" inputmode="decimal" id="r_${f.k}" step="${f.step||1}">`;
+    html+=`<div class="field"><label for="r_${f.k}">${f.l}</label>${input}${f.h?`<small>${f.h}</small>`:''}</div>`;
+  }
+  document.getElementById('rackControls').innerHTML=html+'</details></div>';
+  for(const f of RACK_FIELDS){
+    const el=document.getElementById('r_'+f.k);
+    if(f.bool)el.checked=!!f.d;else el.value=f.d;
+    el.addEventListener('change',()=>{
+      rackState[f.k]=f.bool?el.checked:f.opts?el.value:parseFloat(el.value);
+      renderRack();
+    });
+  }
+}
+function renderRack(){
+  const r=buildRack(rackState);
+  window.__nest.rack=r;
+  document.getElementById('rackPreview').innerHTML=rackPreview(r);
+  const msgs=[...r.errors.map(m=>['error',m]),...r.warnings.map(m=>['warn',m])];
+  if(!r.errors.length)msgs.unshift(['ok','Ready to export.']);
+  document.getElementById('rackChecks').innerHTML=msgs.map(([lv,m])=>`<div class="msg ${lv}">${escapeHtml(m)}</div>`).join('');
+  const st=[['Tubes',`${r.R.left}${r.R.right?` + ${r.R.right}`:''}`],['Outer size',`${f1(r.Lo)} x ${f1(r.Wo)} mm`],['Height',`${f1(r.Hi+2*r.R.t)} mm`],
+    ['Hole size',`${f1(r.D)} mm`],['Held inside',`${f1(r.run)} mm of each tube`],['Parts',`${r.parts.length+r.cover.length}`]];
+  document.getElementById('rackStats').innerHTML=st.map(([a,b])=>`<div><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
+  rackFilesNow=rackFiles(r,{cutColor:P.cutColor,engraveColor:P.engraveColor});
+  const ok=!r.errors.length;
+  setButtons(document.getElementById('rackExports'),`<button id="rackZip" class="primary"${ok?'':' disabled'}>Download everything (.zip)</button>`+
+    rackFilesNow.map((f,i)=>`<button data-rack="${i}"${ok?'':' disabled'}>${escapeHtml(f.name)}</button>`).join(''));
+  if(mode==='rack'){
+    const pill=document.getElementById('pill');
+    pill.className='pill '+(ok?'good':'bad');pill.textContent=ok?'Ready to export':'Fix the checks';
+  }
+}
+let mode='nest';
+function setMode(m){
+  mode=m;
+  document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));
+  document.getElementById('nestView').hidden=m!=='nest';
+  document.getElementById('rackView').hidden=m!=='rack';
+  if(m==='rack')renderRack();else render();
+}
+
 function init(){
   buildForm();
+  buildRackForm();
   P=readParams();
   render();
   document.getElementById('preview').addEventListener('click',onPreviewClick);
+  document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+  document.getElementById('rackTest').addEventListener('click',()=>{const f=rackHoleTest(rackState);saveFile(f.name,f.data);});
+  document.getElementById('rackExports').addEventListener('click',async ev=>{
+    const b=ev.target.closest('button');if(!b||b.disabled)return;
+    if(b.id==='rackZip'){
+      const zip=new JSZip();for(const f of rackFilesNow)zip.file(f.name,f.data);
+      await saveFile(`tube-rack-${rackState.left}-${rackState.right}.zip`,await zip.generateAsync({type:'blob'}));
+      return;
+    }
+    const f=rackFilesNow[+b.dataset.rack];if(f)await saveFile(f.name,f.data);
+  });
   document.querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>{
     tool=b.dataset.tool;joinFrom=null;document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x===b));render();
   }));
@@ -295,5 +360,5 @@ function init(){
   });
 }
 function layoutJSON(){return JSON.stringify({app:'ant-nest-panel-generator',version:2,params:P,layout:L},null,1);}
-window.__nest={get state(){return {P,G,L,geo,rules};},derive,generate,buildGeometry,checkRules,exporters,offsetPoly,stripOutline,testPiece};
+window.__nest={buildRack,get state(){return {P,G,L,geo,rules};},derive,generate,buildGeometry,checkRules,exporters,offsetPoly,stripOutline,testPiece};
 init();

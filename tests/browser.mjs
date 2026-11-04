@@ -117,6 +117,29 @@ await check('water tool adds a vial holder on a flat nest',async p=>{
   await clickSvg(p,`[data-edge="${e}"]`);
   assert.equal(await p.evaluate(()=>window.__nest.state.geo.vials.length),1);
 });
+await check('rack mode shows a rack, reacts to settings and exports a zip',async p=>{
+  await p.click('[data-mode="rack"]');
+  assert.equal(await p.isVisible('#preview'),false);
+  assert.equal(await p.evaluate(()=>window.__nest.rack.tubes.length),11);
+  await p.fill('#r_right','0');await p.dispatchEvent('#r_right','change');
+  assert.equal(await p.evaluate(()=>window.__nest.rack.tubes.length),6);
+  await p.selectOption('#r_cover','hood');
+  assert.ok(await p.$('#rackExports button:has-text("rack-cover.svg")'));
+  const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#rackZip')]);
+  assert.match(dl.suggestedFilename(),/^tube-rack-6-0\.zip$/);
+  await p.fill('#r_stick','140');await p.dispatchEvent('#r_stick','change');
+  assert.equal(await p.$eval('#rackZip',b=>b.disabled),true);
+  assert.match(await p.$eval('#pill',e=>e.textContent),/Fix/);
+  await p.click('[data-mode="nest"]');
+  assert.equal(await p.isVisible('#preview'),true);
+  assert.match(await p.$eval('#pill',e=>e.textContent),/Ready/);
+});
+await check('typing a value then clicking download straight away is not lost',async p=>{
+  await p.locator('summary:has-text("Auto layout")').scrollIntoViewIfNeeded();
+  await p.fill('#p_seed','77');
+  const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#zipAll')]);
+  assert.match(dl.suggestedFilename(),/seed77/);
+});
 await check('export buttons are enabled when rules pass, disabled on an error',async p=>{
   assert.equal(await p.evaluate(()=>window.__nest.state.rules.ok),true);
   assert.equal(await p.$eval('#exports button[data-file="0"]',b=>b.disabled),false);
