@@ -5,6 +5,7 @@ import {drawTopdown} from './draw.js';
 import {doorType} from './doors.js';
 import {heatFrameLayers} from './heat.js';
 import {svgToDxf} from './dxf.js';
+import {escapeHtml} from './sanitize.js';
 import {hardwareParts,pegPart,keyPart,PEG_FIT,JOIN_LEG} from './hardware.js';
 
 /* ---------------- export ---------------- */
@@ -31,7 +32,7 @@ export function pen(P){
     cutout:(pts,tx=0,ty=0)=>cutPoly(pts,-k2,tx,ty),
     rect:s=>cutPoly(s.poly||rectPts(s.x0,s.y0,s.x1,s.y1),-k2),
     hole:(x,y,dia)=>`<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(Math.max(0.05,dia/2-k2))}" ${cut}/>`,
-    txt:(x,y,s,size,rot)=>`<text x="${fmt(x)}" y="${fmt(y)}" font-size="${fmt(size)}" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" fill="${P.engraveColor}" stroke="none"${rot?` transform="rotate(${rot} ${fmt(x)} ${fmt(y)})"`:''}>${s}</text>`,
+    txt:(x,y,s,size,rot)=>`<text x="${fmt(x)}" y="${fmt(y)}" font-size="${fmt(size)}" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" fill="${P.engraveColor}" stroke="none"${rot?` transform="rotate(${rot} ${fmt(x)} ${fmt(y)})"`:''}>${escapeHtml(s)}</text>`,
   };
 }
 // a slot for a peg or cover leg, lying along the border

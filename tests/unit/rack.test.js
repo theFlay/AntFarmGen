@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {buildRack,rackFiles,rackHoleTest,rackPreview,rackDefaults,cleanRack} from '../../src/rack.js';
 
 const R=c=>buildRack({...rackDefaults(),...c});
-const CFGS=[{},{right:0},{cover:'none'},{cover:'hood'},{cover:'hood',right:0},{cover:'caps',gap:7},{lid:false},{tubeD:25,tubeL:200,left:3,right:3},{tubeD:10,tubeL:75,left:8,right:8,stick:15},{left:1,right:1},{numbers:false},{tubeL:60,stick:30}];
+const CFGS=[{},{right:0},{cover:'none'},{cover:'hood'},{cover:'hood',right:0},{cover:'caps',gap:7},{lid:false},{tubeD:25,tubeL:200,left:3,right:3},{tubeD:10,tubeL:75,left:8,right:8,stick:15},{left:1,right:1},{labels:false},{tubeL:60,stick:30}];
 const parts=(r,n)=>r.parts.filter(p=>p.name===n);
 const area=p=>Math.abs(p.reduce((a,v,i)=>{const w=p[(i+1)%p.length];return a+v[0]*w[1]-w[0]*v[1];},0))/2;
 
@@ -121,6 +121,81 @@ test('every cover part fits its sheet and exports clean',()=>{
 test('cover parts go in their own file, so they can be another colour',()=>{
   const n=rackFiles(R({cover:'hood'})).map(f=>f.name);
   assert.ok(n.some(x=>/^rack-sheet/.test(x))&&n.some(x=>/^rack-cover/.test(x)));
+});
+const texts=f=>[...f.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1]);
+const allText=r=>rackFiles(r).flatMap(f=>texts(f.data));
+test('labels use prefix, number, suffix, start and digits',()=>{
+  const l=R({prefix:'HI',digits:2,start:1}).tubes.map(t=>t.label);
+  assert.deepEqual(l.slice(0,2),['HI01','HI02']);
+  assert.equal(l[10],'HI11','numbers carry on down the right side');
+  assert.equal(R({prefix:'Q',suffix:'-A',start:98,digits:3}).tubes[3].label,'Q101-A');
+  assert.equal(R({digits:4,start:7}).tubes[0].label,'0007');
+});
+test('labels that outgrow their digits are refused',()=>{
+  assert.ok(R({digits:1,start:1}).errors.some(e=>/more than 1 digit/.test(e)),'11 tubes need 2 digits');
+  assert.ok(R({digits:2,start:95}).errors.some(e=>/more than 2 digits/.test(e)));
+  assert.deepEqual(R({digits:1,start:1,labels:false}).errors,[]);
+});
+test('labels go beside holes, on the top face and on covers, each with its own switch',()=>{
+  const count=c=>{const r=R({prefix:'HI',cover:'sheath',...c});return allText(r).filter(s=>/^HI/.test(s)).length;};
+  assert.equal(count({}),33,'11 tubes in 3 places');
+  assert.equal(count({labelHoles:false}),22);
+  assert.equal(count({labelFace:false}),22);
+  assert.equal(count({labelCovers:false}),22);
+  assert.equal(count({labels:false}),0);
+  const caps=R({cover:'caps',gap:7,prefix:'HI'});
+  assert.equal(caps.cover.filter(p=>p.name==='cap end'&&p.labels.length===1).length,11);
+});
+test('top face labels sit over the last 15mm of each tube, by the closed end',()=>{
+  for(const c of [{},{lid:false},{right:0}]){
+    const r=R(c),sheet=r.cover.find(p=>p.name==='lid')||parts(r,'base')[0],t=r.R.t,stop=r.stops[0];
+    assert.equal(sheet.labels.length,r.tubes.length);
+    for(const [x,y,s] of sheet.labels){
+      const tube=r.tubes.find(p=>p.label===s);
+      assert.equal(y,tube.y,'lined up with its own tube');
+      const fromEnd=tube.id[0]==='L'?stop-t/2-x:x-(stop+t/2);
+      assert.ok(fromEnd>0&&fromEnd<15,`${fromEnd}mm from the closed end`);
+    }
+  }
+});
+test('seen from outside, each end plate label sits on its own tube',()=>{
+  const r=R({prefix:'T'}),[left,right]=parts(r,'end plate');
+  const order=p=>p.labels.slice().sort((a,b)=>a[0]-b[0]).map(l=>l[2]);
+  // facing the left plate from outside, its cut order matches the rack; the right plate is reversed
+  const byY=side=>r.tubes.filter(t=>t.id[0]===side).sort((a,b)=>a.y-b.y).map(t=>t.label);
+  assert.deepEqual(order(left),byY('L'));
+  assert.deepEqual(order(right),byY('R').reverse());
+});
+test('the left sheath is cut with its text turned round, so it reads right once fitted',()=>{
+  const r=R({prefix:'T'}),[a,b]=r.cover.filter(p=>p.name==='sheath top');
+  assert.ok(a.labels.every(l=>l[4]===180));
+  assert.ok(b.labels.every(l=>!l[4]));
+  const one=R({right:0}).cover.find(p=>p.name==='sheath top');
+  assert.ok(one.labels.every(l=>!l[4]));
+});
+test('face text goes in the chosen squares of the 3 x 3 grid',()=>{
+  const r=R({face1:'Top left',face5:'Middle',face9:'Bottom right',labels:false}),lid=r.cover.find(p=>p.name==='lid');
+  const at=s=>lid.labels.find(l=>l[2]===s);
+  assert.equal(lid.labels.length,3);
+  assert.ok(at('Top left')[0]<lid.w/3&&at('Top left')[1]<lid.h/3);
+  assert.ok(Math.abs(at('Middle')[0]-lid.w/2)<1e-9&&Math.abs(at('Middle')[1]-lid.h/2)<1e-9);
+  assert.ok(at('Bottom right')[0]>2*lid.w/3&&at('Bottom right')[1]>2*lid.h/3);
+  assert.ok(R({face2:'x'}).warnings.some(w=>/middle column/.test(w)));
+  const n=R({face1:'Base',lid:false,cover:'none',labels:false});
+  assert.equal(parts(n,'base')[0].labels.length,1,'no lid means the base takes it');
+  assert.ok(R({face1:'Hood',cover:'hood'}).cover.find(p=>p.name==='hood top').labels.length===1);
+});
+test('long face text shrinks to fit its square',()=>{
+  const r=R({face1:'A very long line of text here',labels:false}),lid=r.cover.find(p=>p.name==='lid');
+  const [,, s,size]=lid.labels[0];
+  assert.ok(s.length*size*0.62<=lid.w/3-3);
+});
+test('label text cannot break out of the file',()=>{
+  const f=rackFiles(R({prefix:'<b>',face1:'"><script>'})).map(x=>x.data).join('');
+  assert.doesNotMatch(f,/<script>|<b>/);
+  assert.match(f,/&lt;b&gt;/);
+  assert.equal(cleanRack({prefix:'123456789'}).prefix,'123456');
+  assert.equal(cleanRack({face1:'a\u0000b'}).face1,'ab');
 });
 test('bad inputs are refused or limited',()=>{
   assert.ok(R({tubeL:60,stick:50}).errors.some(e=>/stick out too far/.test(e)));

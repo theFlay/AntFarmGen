@@ -3,7 +3,7 @@
 // end, up against a stop wall, so its open end sticks out by a set amount.
 import {fmt,rectPts} from './util.js';
 import {pen,svgDoc} from './export.js';
-import {cleanParam} from './sanitize.js';
+import {cleanParam,escapeHtml} from './sanitize.js';
 
 export const RACK_FIELDS=[
   {k:'tubeD',l:'Tube diameter (mm)',d:16,step:0.5,range:[5,60],h:'Measure the outside of your widest tube.'},
@@ -14,8 +14,17 @@ export const RACK_FIELDS=[
   {k:'gap',l:'Gap between tubes (mm)',d:3,step:0.5,range:[1.5,30]},
   {k:'holeClear',l:'Hole clearance (mm)',d:0.6,step:0.1,range:[0,5],h:'Added to the tube diameter. Tune it with the hole test strip.'},
   {k:'lid',l:'Lift-off lid',d:true,bool:true,h:'A red rack with a lid only needs its tube ends covered.'},
-  {k:'cover',l:'Tube end cover',d:'sheath',opts:[['none','None'],['caps','One cap per tube'],['sheath','One sheath per side'],['hood','Hood over everything']],h:'Caps and sheaths suit a red rack. The hood is for a rack cut from clear acrylic.'},
-  {k:'numbers',l:'Engrave tube numbers',d:true,bool:true},
+  {k:'cover',l:'Tube end cover',d:'sheath',opts:[['none','None'],['caps','Cap per tube'],['sheath','Sheath per side'],['hood','Hood over all']],h:'Caps and sheaths suit a red rack. The hood is for a rack cut from clear acrylic.'},
+  {k:'labels',g:'Tube labels',l:'Label the tubes',d:true,bool:true,h:'Numbers run down the left side, then the right.'},
+  {k:'prefix',g:'Tube labels',l:'Prefix',d:'',text:true,max:6,h:'For example HI gives HI01, HI02.'},
+  {k:'start',g:'Tube labels',l:'Start number',d:1,step:1,range:[0,9999]},
+  {k:'digits',g:'Tube labels',l:'Digits (1 to 4)',d:2,step:1,range:[1,4]},
+  {k:'suffix',g:'Tube labels',l:'Suffix',d:'',text:true,max:6},
+  {k:'labelHoles',g:'Tube labels',l:'Beside each hole',d:true,bool:true},
+  {k:'labelFace',g:'Tube labels',l:'On the top face',d:true,bool:true,h:'Over the last 15mm of the tube, by the closed end, so it stays clear of the ants.'},
+  {k:'labelCovers',g:'Tube labels',l:'On caps or sheaths',d:true,bool:true},
+  ...[1,2,3,4,5,6,7,8,9].map(i=>({k:'face'+i,g:'Face text',grid:true,l:`Face text ${i}`,d:'',text:true,max:40})),
+  {k:'faceSize',g:'Face text',l:'Text size (mm)',d:5,step:0.5,range:[2,30]},
   {k:'t',l:'Sheet thickness, measured (mm)',d:3,step:0.01,range:[1.5,10]},
   {k:'kerf',l:'Kerf (mm)',d:0.15,step:0.01,range:[0,2]},
   {k:'slotClear',l:'Slot clearance (mm)',d:0,step:0.01,range:[-2,2]},
@@ -69,6 +78,11 @@ export function buildRack(input){
     stops.push(inset+run+t/2);
     if(run>=45)combs.push({x:inset+run-12,count:R.left});
   }
+  // tube labels run down the left side, then the right
+  const labelOf=i=>R.prefix+String(R.start+i).padStart(R.digits,'0')+R.suffix;
+  const total=R.left+R.right;
+  if(R.labels&&String(R.start+total-1).length>R.digits)errors.push(`${total} tubes from ${R.start} need more than ${R.digits} digit${R.digits>1?'s':''}.`);
+  const fitSize=(s,room,max)=>Math.min(max,room/(Math.max(1,s.length)*0.62));
   const parts=[],baseSlots=[],topSlots=[],wallSlots=[];
   const slotAcross=(x,y,l)=>rectPts(x-t/2-cl/2,y-l/2-cl/2,x+t/2+cl/2,y+l/2+cl/2);
   const slotAlong=(x,y,l)=>rectPts(x-l/2-cl/2,y-t/2-cl/2,x+l/2+cl/2,y+t/2+cl/2);
@@ -87,14 +101,18 @@ export function buildRack(input){
     wallSlots.push({x,v:h/2,l:sideL});
     const out={name,w:p.w,h:p.h,poly:p.poly,holes:[],circles:[],labels:[]};
     (extra.circles||[]).forEach(([u,v])=>out.circles.push([u+p.ox,h-v+p.oy,D]));
-    (extra.labels||[]).forEach(([u,v,s])=>out.labels.push([u+p.ox,h-v+p.oy,s]));
+    (extra.labels||[]).forEach(([u,v,s,size])=>out.labels.push([u+p.ox,h-v+p.oy,s,size]));
     parts.push(out);
   }
   for(const e of ends){
-    const y=rowY(e.count),holes=[],labels=[];
+    const y=rowY(e.count),holes=[],labels=[],first=e.side==='L'?0:R.left;
     for(let i=0;i<e.count;i++){
       holes.push([y(i),zc]);
-      if(R.numbers)labels.push([y(i),Hi-1.6,e.side+(i+1)]);
+      if(R.labels&&R.labelHoles){
+        // the right plate faces the other way, so seen from outside its order runs in reverse
+        const s=labelOf(first+(e.side==='L'?i:e.count-1-i));
+        labels.push([y(i),Hi-1.6,s,fitSize(s,D+gap-1,2.2)]);
+      }
     }
     crossPlate('end plate',e.x,{circles:holes,labels});
   }
@@ -150,7 +168,17 @@ export function buildRack(input){
   if(R.cover==='sheath'){
     // for a red rack: slides over one end, covering every tube end on that side
     const overlap=15,inL=inset+reach+overlap;
-    for(let i=0;i<(twoSided?2:1);i++)sheathSize=box('sheath',inL,Wo+1,rackH+1,1);
+    for(let i=0;i<(twoSided?2:1);i++){
+      sheathSize=box('sheath',inL,Wo+1,rackH+1,1);
+      if(R.labels&&R.labelCovers){
+        // the left sheath turns round to fit, so its text is cut upside down in the sheet
+        const top=cover.filter(p=>p.name==='sheath top')[i],k=i===0?R.left:R.right,first=i===0?0:R.left,y=rowY(k);
+        for(let n=0;n<k;n++){
+          const s=labelOf(first+n),yp=3+t+0.5+edge+t+y(n);
+          top.labels.push([top.w/2,i===0&&twoSided?top.h-yp:yp,s,fitSize(s,top.w-8,3),i===0&&twoSided?180:0]);
+        }
+      }
+    }
   }
   const capW=R.tubeD+0.6;                        // inside width of a cap
   const capOut=capW+2*t,capLen=R.stick+3+t;
@@ -169,16 +197,31 @@ export function buildRack(input){
         cover.push({name:'cap narrow side',w:q.w,h:q.h,poly:q.poly,holes:[rectPts(qc-sw/2-cl/2,qy-t/2-cl/2,qc+sw/2+cl/2,qy+t/2+cl/2)],circles:[],labels:[]});
       }
       const e=plate(capW,capW,['top','right','bottom','left'].reduce((o,k)=>(o[k]=[{u:capW/2,l:capW/2,d:t}],o),{}));
-      cover.push({name:'cap end',w:e.w,h:e.h,poly:e.poly,holes:[],circles:[],labels:[]});
+      const s=labelOf(i);
+      cover.push({name:'cap end',w:e.w,h:e.h,poly:e.poly,holes:[],circles:[],
+        labels:R.labels&&R.labelCovers?[[e.w/2,e.h/2,s,fitSize(s,capW-2,3)]]:[]});
     }
   }
+  // tube labels on the top face, clear of where the ants settle
+  const base=parts.find(p=>p.name==='base'),faceSheet=cover.find(p=>p.name==='lid')||base;
+  const row=(k,x0,x1,tag)=>{const y=rowY(k);for(let i=0;i<k;i++)tubes.push({x0,x1,y:edge+t+y(i),id:tag+(i+1),label:labelOf((tag==='R'?R.left:0)+i)});};
+  const tubes=[];
+  row(R.left,inset-R.stick,inset+run,'L');
+  if(twoSided)row(R.right,Lo-inset-run,Lo-inset+R.stick,'R');
+  if(R.labels&&R.labelFace)for(const p of tubes){
+    const x=p.id[0]==='L'?inset+run-7.5:inset+run+t+7.5;
+    faceSheet.labels.push([x,p.y,p.label,fitSize(p.label,14,3)]);
+  }
+  // free text in a 3 x 3 grid over the whole top face
+  const faceTop=cover.find(p=>p.name==='lid')||cover.find(p=>p.name==='hood top')||base;
+  for(let i=0;i<9;i++){
+    const s=R['face'+(i+1)].trim();
+    if(s)faceTop.labels.push([(i%3+0.5)*faceTop.w/3,(Math.floor(i/3)+0.5)*faceTop.h/3,s,fitSize(s,faceTop.w/3-4,R.faceSize)]);
+  }
+  if(R.labels&&R.labelFace&&twoSided&&[2,5,8].some(i=>R['face'+i].trim()))warnings.push('Face text in the middle column will sit close to the tube labels.');
   for(const p of [...parts,...cover])if(p.w>R.stockW-10||p.h>R.stockH-10)errors.push(`The ${p.name} is ${fmt(p.w)} x ${fmt(p.h)}mm, too big for the ${R.stockW} x ${R.stockH}mm sheet.`);
   if(hood)warnings.push('A hood blocks air and light. Tubes breathe through their cotton, so lift it often to check for condensation or mould.');
   if(R.cover==='sheath'||R.cover==='caps')warnings.push('Cut covers from red acrylic, the same as the rack. Check each tube can still breathe through its cotton.');
-  const tubes=[];
-  const row=(k,x0,x1,tag)=>{const y=rowY(k);for(let i=0;i<k;i++)tubes.push({x0,x1,y:edge+t+y(i),id:tag+(i+1)});};
-  row(R.left,inset-R.stick,inset+run,'L');
-  if(twoSided)row(R.right,Lo-inset-run,Lo-inset+R.stick,'R');
   return {R,parts,cover,errors,warnings,Lo,Wo,Hi,D,run,tubes,inset,edge,stops,ends,combs:combs.map(c=>c.x),capOut,capLen,hoodSize,sheathSize,rackH};
 }
 
@@ -203,7 +246,7 @@ export function rackFiles(rack,colors={cutColor:'#ff0000',engraveColor:'#000000'
         b.push(d.outline(it.poly,x,y));
         for(const h of it.holes)b.push(d.cutout(h,x,y));
         for(const [cx,cy,dia] of it.circles)b.push(d.hole(x+cx,y+cy,dia));
-        for(const [cx,cy,s] of it.labels)b.push(d.txt(x+cx,y+cy,s,2.2));
+        for(const [cx,cy,s,size,rot] of it.labels)b.push(d.txt(x+cx,y+cy,s,size||2.2,rot));
       }
       files.push({name:`${name}${all.length>1?'-'+(i+1):''}.svg`,data:svgDoc(R.stockW,R.stockH,b.join('\n'),title)});
     });
@@ -229,7 +272,7 @@ export function rackPreview(rack){
   o.push(`<rect x="0" y="0" width="${fmt(Lo)}" height="${fmt(Wo)}" fill="#e5a59b"/>`);
   for(const p of tubes){
     o.push(`<rect x="${fmt(p.x0)}" y="${fmt(p.y-R.tubeD/2)}" width="${fmt(p.x1-p.x0)}" height="${fmt(R.tubeD)}" rx="${fmt(R.tubeD/2)}" fill="#f7f4ee" stroke="#8c867a" stroke-width="0.6"/>`);
-    o.push(`<text x="${fmt((p.x0+p.x1)/2)}" y="${fmt(p.y+1.6)}" font-size="4.5" text-anchor="middle" fill="#736c60">${p.id}</text>`);
+    o.push(`<text x="${fmt((p.x0+p.x1)/2)}" y="${fmt(p.y+1.6)}" font-size="4.5" text-anchor="middle" fill="#736c60">${escapeHtml(R.labels?p.label:p.id)}</text>`);
   }
   for(const x of [...ends.map(e=>e.x),...stops,...combs])o.push(`<rect x="${fmt(x-t/2)}" y="${fmt(edge+t)}" width="${fmt(t)}" height="${fmt(Wo-2*edge-2*t)}" fill="#a3281f"/>`);
   for(const y of [edge,Wo-edge-t])o.push(`<rect x="0" y="${fmt(y)}" width="${fmt(Lo)}" height="${fmt(t)}" fill="#a3281f"/>`);

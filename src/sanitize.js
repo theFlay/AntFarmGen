@@ -69,6 +69,7 @@ export function cleanLayout(l,G){
 // keeps a setting to a known option, a real colour, or a sane number range
 export function cleanParam(f,v){
   if(f.bool)return v===true;
+  if(f.text)return String(v??'').replace(/[\u0000-\u001f\u007f]/g,'').slice(0,f.max||40);
   if(f.opts)return f.opts.some(o=>o[0]===v)?v:f.d;
   if(f.color)return /^#[0-9a-fA-F]{6}$/.test(v)?v:f.d;
   if(v===null)return f.opt?null:f.d;

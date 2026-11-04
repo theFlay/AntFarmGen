@@ -140,6 +140,16 @@ await check('typing a value then clicking download straight away is not lost',as
   const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#zipAll')]);
   assert.match(dl.suggestedFilename(),/seed77/);
 });
+await check('rack labels and face text reach the cut files',async p=>{
+  await p.click('[data-mode="rack"]');
+  await p.locator('summary:has-text("Tube labels")').click();
+  await p.fill('#r_prefix','HI');await p.dispatchEvent('#r_prefix','change');
+  assert.equal(await p.evaluate(()=>window.__nest.rack.tubes[0].label),'HI01');
+  await p.locator('summary:has-text("Face text")').click();
+  await p.fill('#r_face5','Queens');await p.dispatchEvent('#r_face5','change');
+  assert.ok(await p.evaluate(()=>window.__nest.rack.cover.find(c=>c.name==='lid').labels.some(l=>l[2]==='Queens')));
+  assert.match(await p.$eval('#rackPreview',e=>e.textContent),/HI01/);
+});
 await check('export buttons are enabled when rules pass, disabled on an error',async p=>{
   assert.equal(await p.evaluate(()=>window.__nest.state.rules.ok),true);
   assert.equal(await p.$eval('#exports button[data-file="0"]',b=>b.disabled),false);

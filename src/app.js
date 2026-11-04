@@ -255,20 +255,28 @@ async function saveFile(name,data){
 /* ---------------- test tube rack ---------------- */
 let rackState=rackDefaults(),rackFilesNow=[];
 function buildRackForm(){
-  let html='<div class="group"><details open><summary>Tubes and rack</summary>';
-  for(const f of RACK_FIELDS){
+  const groups=[...new Set(RACK_FIELDS.map(f=>f.g||'Tubes and rack'))];
+  let html='';
+  for(const g of groups){
+   html+=`<div class="group"><details${g==='Tubes and rack'?' open':''}><summary>${g}</summary>`;
+   if(g==='Face text')html+='<p class="note">The top of the rack split into 9 squares. Fill in any you like.</p><div class="facegrid">'+
+     RACK_FIELDS.filter(f=>f.grid).map(f=>`<input type="text" id="r_${f.k}" maxlength="${f.max}" aria-label="${f.l}">`).join('')+'</div>';
+   for(const f of RACK_FIELDS.filter(x=>(x.g||'Tubes and rack')===g&&!x.grid)){
     let input;
-    if(f.opts)input=`<select id="r_${f.k}">${f.opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
+    if(f.text)input=`<input type="text" id="r_${f.k}" maxlength="${f.max}">`;
+    else if(f.opts)input=`<select id="r_${f.k}">${f.opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
     else if(f.bool)input=`<input type="checkbox" id="r_${f.k}">`;
     else input=`<input type="number" inputmode="decimal" id="r_${f.k}" step="${f.step||1}">`;
     html+=`<div class="field"><label for="r_${f.k}">${f.l}</label>${input}${f.h?`<small>${f.h}</small>`:''}</div>`;
+   }
+   html+='</details></div>';
   }
-  document.getElementById('rackControls').innerHTML=html+'</details></div>';
+  document.getElementById('rackControls').innerHTML=html;
   for(const f of RACK_FIELDS){
     const el=document.getElementById('r_'+f.k);
     if(f.bool)el.checked=!!f.d;else el.value=f.d;
     el.addEventListener('change',()=>{
-      rackState[f.k]=f.bool?el.checked:f.opts?el.value:parseFloat(el.value);
+      rackState[f.k]=f.bool?el.checked:f.opts||f.text?el.value:parseFloat(el.value);
       renderRack();
     });
   }
