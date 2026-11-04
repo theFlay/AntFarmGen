@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ant nest panel generator</title>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1f1e1c;--muted:#6b6a65;--line:#d9d6cf;--accent:#5b4fc4;--err:#c0392b;--warn:#b7791f;--ok:#2f855a}
+@media (prefers-color-scheme:dark){:root{--bg:#1b1b1a;--card:#262624;--ink:#ecebe7;--muted:#a3a19a;--line:#3a3936;--accent:#9d93f0;--err:#ef6b5b;--warn:#e0a84a;--ok:#5cc28c}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:12px 16px;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0;font-weight:600}
+.sub{color:var(--muted);font-size:13px}
+.wrap{display:grid;grid-template-columns:350px 1fr;gap:12px;padding:12px;align-items:start}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}main{order:-1}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+details>summary{cursor:pointer;font-weight:600;padding:2px 0}
+.field{display:grid;grid-template-columns:1fr 110px;gap:4px 8px;align-items:center;margin:7px 0}
+.field label{font-size:13px}
+.field small{grid-column:1/-1;color:var(--muted);font-size:12px;margin-top:-2px}
+input,select{width:100%;padding:5px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+input[type=checkbox]{width:auto;justify-self:start}
+input[type=color]{height:30px;padding:2px}
+button{font:inherit;padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tools button.on{outline:2px solid var(--accent);outline-offset:1px}
+#preview svg{width:100%;height:auto;display:block;touch-action:manipulation;margin-top:8px}
+.msg{font-size:13px;margin:3px 0}
+.msg.error{color:var(--err)}.msg.warn{color:var(--warn)}.msg.ok{color:var(--ok)}.msg.info{color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:3px 14px;font-size:13px;margin-top:4px}
+.stats span{color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted);margin-top:6px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:1px solid rgba(0,0,0,.2)}
+#status{font-size:13px;color:var(--muted);min-height:18px;margin-top:6px}
+.derived{font-size:12px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ant nest panel generator</h1>
+  <div class="sub">v1: acrylic strip-wall nest panels for a CO2 laser. Wang-tile layout, shared walls, tab-and-slot assembly.</div>
+</header>
+<div class="wrap">
+  <aside id="controls"></aside>
+  <main>
+    <div class="card">
+      <div class="row tools" id="tools">
+        <span>Edit:</span>
+        <button data-tool="wall" class="on">Walls</button>
+        <button data-tool="cell">Chambers on/off</button>
+        <button data-tool="merge">Brood 2x2</button>
+        <button id="undo">Undo</button>
+        <span style="flex:1"></span>
+        <button id="reseed">New seed</button>
+        <button id="regen" class="primary">Generate layout</button>
+      </div>
+      <div id="toolhelp" class="msg info"></div>
+      <div id="preview"></div>
+      <div class="legend">
+        <span><i class="sw" style="background:#e9d5a6"></i>Chamber</span>
+        <span><i class="sw" style="background:#8a8a86"></i>Inactive (sealed)</span>
+        <span><i class="sw" style="background:#5b4fc4"></i>Wall strip</span>
+        <span><i class="sw" style="background:#2fb37a"></i>Tunnel</span>
+        <span><i class="sw" style="background:#4a90d9"></i>Sponge pocket</span>
+        <span><i class="sw" style="background:#b9c3c6"></i>Frame</span>
+        <span><i class="sw" style="background:#e5484d"></i>Problem</span>
+      </div>
+    </div>
+    <div class="card"><b>Checks</b><div id="checks"></div></div>
+    <div class="card"><b>Summary</b><div id="stats" class="stats"></div></div>
+    <div class="card"><b>Export cut files (SVG, mm)</b>
+      <div class="msg info">Red = cut, black = engrave (change below). Kerf is already applied. Every file is drawn at 1:1 in millimetres.</div>
+      <div class="row" id="exports" style="margin-top:6px"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="saveLayout">Save layout (.json)</button>
+        <button id="loadBtn">Load layout</button>
+        <input type="file" id="loadLayout" accept=".json,application/json" hidden>
+      </div>
+      <div id="status"></div>
+    </div>
+  </main>
+</div>
+<script>
+"use strict";
+/* ---------------- parameters ---------------- */
+const PARAMS=[
+ ['Panel',true,[
+  {k:'W',l:'Panel width (mm)',d:400},
+  {k:'H',l:'Panel height (mm)',d:200},
+  {k:'B',l:'Border (mm)',d:15,h:'Fixed width. Port adaptors and bolts sit here.'},
+ ]],
+ ['Ants',true,[
+  {k:'sizeFor',l:'Size for',d:'both',opts:[['workers','Workers'],['queens','Queens'],['both','Both']],h:'Chambers follow worker length (queen length if Queens). Tunnels follow queen width when given.'},
+  {k:'workerLen',l:'Worker length (mm)',d:13},
+  {k:'queenLen',l:'Queen length (mm)',d:null,opt:true},
+  {k:'queenWidth',l:'Queen width incl. legs (mm)',d:null,opt:true},
+  {k:'pitchFactor',l:'Chamber size factor',d:3,step:0.1,h:'Cell pitch = factor x ant length. The grid then stretches to fill the panel exactly.'},
+  {k:'tunnelW',l:'Tunnel width override (mm)',d:null,opt:true,h:'Blank = auto from ant size.'},
+ ]],
+ ['Construction',false,[
+  {k:'t',l:'Wall sheet thickness, measured (mm)',d:3,step:0.01,h:'Strips and frame layers are cut from this sheet.'},
+  {k:'layers',l:'Frame layers',d:4,step:1,h:'Depth = layers x wall sheet thickness.'},
+  {k:'S',l:'Front/back sheet thickness (mm)',d:3,step:0.01,h:'Tabs are this tall so they sit flush.'},
+  {k:'tunnelH',l:'Tunnel height override (mm)',d:null,opt:true,h:'Blank = depth minus 3.'},
+  {k:'tabL',l:'Tab length (mm)',d:8},
+  {k:'tabPitch',l:'Tab spacing (mm)',d:35},
+  {k:'kerf',l:'Kerf (mm)',d:0.15,step:0.01,h:'Measure from a test cut.'},
+  {k:'slotClear',l:'Slot clearance (mm)',d:0,step:0.01,h:'Added to slot size. Negative = tighter fit.'},
+ ]],
+ ['Ports and bolts',false,[
+  {k:'portPitch',l:'Port spacing (mm)',d:100},
+  {k:'portOffset',l:'Port offset from corner (mm)',d:50},
+  {k:'boltD',l:'Bolt hole diameter (mm)',d:3.4,step:0.1},
+  {k:'boltSpacing',l:'Max bolt spacing (mm)',d:60},
+ ]],
+ ['Sponges and vents',false,[
+  {k:'spongeD',l:'Sponge pocket width (mm)',d:6},
+  {k:'spongeLen',l:'Sponge pocket length (mm)',d:24},
+  {k:'slotW',l:'Sponge vent slot width (mm)',d:1.2,step:0.1,h:'Narrower than the smallest ant head.'},
+  {k:'fillD',l:'Fill hole diameter (mm)',d:3,step:0.1},
+  {k:'fillSide',l:'Syringe top-up from',d:'front',opts:[['front','Front'],['back','Back'],['both','Both']]},
+  {k:'ventD',l:'Air vent hole diameter (mm)',d:1,step:0.1},
+  {k:'ventGrid',l:'Air vents per chamber (n x n)',d:3,step:1},
+ ]],
+ ['Auto layout',true,[
+  {k:'seed',l:'Seed',d:1234,step:1},
+  {k:'brood',l:'Brood chambers (2x2)',d:1,step:1},
+  {k:'activeCount',l:'Active chambers (0 = all)',d:0,step:1,h:'Unused cells stay sealed. Start small and grow.'},
+  {k:'growFrom',l:'Grow active area from',d:'left',opts:[['left','Left'],['right','Right'],['top','Top'],['bottom','Bottom'],['center','Centre']]},
+  {k:'loops',l:'Extra loop tunnels (0 to 1)',d:0.15,step:0.05},
+  {k:'sponges',l:'Sponges',d:3,step:1},
+  {k:'dampSide',l:'Damp side',d:'left',opts:[['left','Left'],['right','Right'],['top','Top'],['bottom','Bottom'],['none','None (spread)']]},
+ ]],
+ ['Export',false,[
+  {k:'stockW',l:'Strip stock sheet width (mm)',d:600},
+  {k:'stockH',l:'Strip stock sheet height (mm)',d:400},
+  {k:'cutColor',l:'Cut line colour',d:'#ff0000',color:true},
+  {k:'engraveColor',l:'Engrave colour',d:'#000000',color:true},
+  {k:'engraveIds',l:'Engrave part IDs',d:true,bool:true},
+ ]],
+];
+const GEN_KEYS=new Set(['seed','brood','activeCount','growFrom','loops','sponges','dampSide']);
+const ALL_FIELDS=PARAMS.flatMap(g=>g[2]);
+
+function buildForm(){
+  const root=document.getElementById('controls');
+  let html='';
+  for(const [name,open,fields] of PARAMS){
+    html+=`<div class="card"><details${open?' open':''}><summary>${name}</summary>`;
+    for(const f of fields){
+      let input;
+      if(f.opts) input=`<select id="p_${f.k}">${f.opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
+      else if(f.bool) input=`<input type="checkbox" id="p_${f.k}">`;
+      else if(f.color) input=`<input type="color" id="p_${f.k}">`;
+      else input=`<input type="number" inputmode="decimal" id="p_${f.k}" step="${f.step||1}"${f.opt?' placeholder="auto"':''}>`;
+      html+=`<div class="field"><label for="p_${f.k}">${f.l}</label>${input}${f.h?`<small>${f.h}</small>`:''}</div>`;
+    }
+    if(name==='Ants') html+=`<div class="derived" id="derived"></div>`;
+    html+=`</details></div>`;
+  }
+  root.innerHTML=html;
+  for(const f of ALL_FIELDS){
+    const el=document.getElementById('p_'+f.k);
+    setField(f,f.d);
+    el.addEventListener('change',()=>onParamChange(f.k));
+  }
+}
+function setField(f,v){
+  const el=document.getElementById('p_'+f.k);
+  if(f.bool) el.checked=!!v; else el.value=(v===null||v===undefined)?'':v;
+}
+function readParams(){
+  const P={};
+  for(const f of ALL_FIELDS){
+    const el=document.getElementById('p_'+f.k);
+    if(f.bool) P[f.k]=el.checked;
+    else if(f.opts||f.color) P[f.k]=el.value;
+    else{
+      const s=el.value.trim();
+      if(s===''){ P[f.k]=f.opt?null:f.d; }
+      else{ const n=parseFloat(s); P[f.k]=isFinite(n)?n:(f.opt?null:f.d); }
+    }
+  }
+  return P;
+}
+
+/* ---------------- helpers ---------------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+const fmt=n=>(Math.round(n*1000)/1000).toString();
+const f1=n=>(Math.round(n*10)/10).toString();
+function shuffle(a,rnd){for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+const rectPts=(x0,y0,x1,y1)=>[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+
+/* ---------------- derived grid ---------------- */
+function derive(P){
+  const t=P.t, depth=P.layers*P.t;
+  const baseLen=(P.sizeFor==='queens'&&P.queenLen)?P.queenLen:P.workerLen;
+  const pitch=Math.max(5,P.pitchFactor*baseLen);
+  let tunnelW=P.tunnelW;
+  if(tunnelW==null){
+    tunnelW=(P.sizeFor!=='workers'&&P.queenWidth)?P.queenWidth+1.5:Math.round(P.workerLen*0.55*2)/2;
+  }
+  const tunnelH=P.tunnelH!=null?P.tunnelH:Math.max(3,depth-3);
+  const innerW=P.W-2*P.B, innerH=P.H-2*P.B;
+  // pick the cell count closest to the target pitch that keeps ports clear of wall lines
+  const clear=t/2+tunnelW/2+0.5;
+  function bestCount(inner,len,target){
+    const ports=[];if(P.portPitch>=5)for(let q=P.portOffset;q<=len-P.portOffset+1e-6;q+=P.portPitch)ports.push(q);
+    const n0=Math.max(1,Math.round(inner/target));
+    let best=n0,bestHits=1e9;
+    for(const n of [n0,n0-1,n0+1,n0-2,n0+2]){
+      if(n<1)continue;const cw=inner/n;
+      if(Math.abs(cw-target)/target>0.35)continue;
+      let hits=0;for(const q of ports)for(let i=1;i<n;i++)if(Math.abs(q-(P.B+i*cw))<clear)hits++;
+      if(hits<bestHits){bestHits=hits;best=n;}
+      if(hits===0)break;
+    }
+    return {n:best,adjusted:best!==n0};
+  }
+  const bc=bestCount(innerW,P.W,pitch), br=bestCount(innerH,P.H,pitch);
+  const cols=bc.n, rows=br.n, adjusted=bc.adjusted||br.adjusted;
+  const cellW=innerW/cols, cellH=innerH/rows;
+  const xs=[],ys=[];
+  for(let i=0;i<=cols;i++) xs.push(P.B+i*cellW);
+  for(let j=0;j<=rows;j++) ys.push(P.B+j*cellH);
+  return {t,depth,pitch,tunnelW,tunnelH,innerW,innerH,cols,rows,cellW,cellH,xs,ys,adjusted};
+}
+
+/* ---------------- layout model ----------------
+ H[j][k] (j=1..rows-1, k=0..cols-1): wall between cell(j-1,k) and cell(j,k)
+ V[r][i] (r=0..rows-1, i=1..cols-1): wall between cell(r,i-1) and cell(r,i)
+ states: 'solid' | 'tunnel' | 'sponge'; merged interiors read as 'none'
+*/
+function emptyLayout(cols,rows){
+  const L={cols,rows,active:[],merges:[],H:[],V:[]};
+  for(let r=0;r<rows;r++) L.active.push(new Array(cols).fill(true));
+  for(let j=0;j<=rows;j++) L.H.push(new Array(cols).fill('solid'));
+  for(let r=0;r<rows;r++) L.V.push(new Array(cols+1).fill('solid'));
+  return L;
+}
+const mergeOf=(L,r,c)=>L.merges.findIndex(m=>r>=m.r&&r<=m.r+1&&c>=m.c&&c<=m.c+1);
+const hMerged=(L,j,k)=>L.merges.some(m=>j===m.r+1&&(k===m.c||k===m.c+1));
+const vMerged=(L,r,i)=>L.merges.some(m=>i===m.c+1&&(r===m.r||r===m.r+1));
+const stH=(L,j,k)=>hMerged(L,j,k)?'none':L.H[j][k];
+const stV=(L,r,i)=>vMerged(L,r,i)?'none':L.V[r][i];
+const getEdge=(L,e)=>e.type==='H'?stH(L,e.j,e.k):stV(L,e.r,e.i);
+function setEdge(L,e,s){ if(e.type==='H') L.H[e.j][e.k]=s; else L.V[e.r][e.i]=s; }
+
+function chambers(L){
+  const id=[];let n=0;const list=[];
+  for(let r=0;r<L.rows;r++){id.push([]);for(let c=0;c<L.cols;c++)id[r].push(-1);}
+  L.merges.forEach(m=>{const ch={id:n,cells:[],merged:true};for(let dr=0;dr<2;dr++)for(let dc=0;dc<2;dc++){id[m.r+dr][m.c+dc]=n;ch.cells.push([m.r+dr,m.c+dc]);}list.push(ch);n++;});
+  for(let r=0;r<L.rows;r++)for(let c=0;c<L.cols;c++)if(id[r][c]<0){id[r][c]=n;list.push({id:n,cells:[[r,c]],merged:false});n++;}
+  for(const ch of list) ch.active=ch.cells.every(([r,c])=>L.active[r][c]);
+  return {id,list};
+}
+function interiorEdges(L,ch){
+  const out=[];
+  for(let j=1;j<L.rows;j++)for(let k=0;k<L.cols;k++){const a=ch.id[j-1][k],b=ch.id[j][k];if(a!==b)out.push({type:'H',j,k,a,b});}
+  for(let r=0;r<L.rows;r++)for(let i=1;i<L.cols;i++){const a=ch.id[r][i-1],b=ch.id[r][i];if(a!==b)out.push({type:'V',r,i,a,b});}
+  return out;
+}
+function adjacency(L,ch){
+  const adj=new Map(ch.list.map(c=>[c.id,new Map()]));
+  for(const e of interiorEdges(L,ch)){
+    for(const [x,y] of [[e.a,e.b],[e.b,e.a]]){const m=adj.get(x);if(!m.has(y))m.set(y,[]);m.get(y).push(e);}
+  }
+  return adj;
+}
+function chamberCenter(G,ch){
+  let sx=0,sy=0;for(const [r,c] of ch.cells){sx+=(G.xs[c]+G.xs[c+1])/2;sy+=(G.ys[r]+G.ys[r+1])/2;}
+  return [sx/ch.cells.length,sy/ch.cells.length];
+}
+
+/* ---------------- auto generator ---------------- */
+function generate(G,P){
+  const rnd=mulberry32(((P.seed|0)>>>0)||1);
+  const pick=a=>a[Math.floor(rnd()*a.length)];
+  const L=emptyLayout(G.cols,G.rows);
+  const want=Math.max(0,Math.round(P.brood||0));
+  if(G.cols>=2&&G.rows>=2){
+    for(let n=0,tries=0;n<want&&tries<400;tries++){
+      const r=Math.floor(rnd()*(G.rows-1)),c=Math.floor(rnd()*(G.cols-1));
+      if(L.merges.some(m=>Math.abs(m.r-r)<2&&Math.abs(m.c-c)<2))continue;
+      L.merges.push({r,c});n++;
+    }
+  }
+  const ch=chambers(L), adj=adjacency(L,ch);
+  const total=ch.list.length, ac=Math.round(P.activeCount||0);
+  const tgt={left:[P.B,P.H/2],right:[P.W-P.B,P.H/2],top:[P.W/2,P.B],bottom:[P.W/2,P.H-P.B],center:[P.W/2,P.H/2]}[P.growFrom]||[P.W/2,P.H/2];
+  const portCh=new Set(portCells(G,P).map(p=>ch.id[p.cell[0]][p.cell[1]]));
+  function growRegion(){
+    if(!(ac>0&&ac<total))return new Set(ch.list.map(c=>c.id));
+    let best=null,bd=1e18;
+    for(const c of ch.list){
+      if(P.growFrom!=='center'&&portCh.size&&!portCh.has(c.id))continue;
+      const [x,y]=chamberCenter(G,c);const d=(x-tgt[0])**2+(y-tgt[1])**2;if(d<bd){bd=d;best=c.id;}
+    }
+    const set=new Set([best]);
+    while(set.size<ac){
+      const front=[];for(const a of set)for(const b of adj.get(a).keys())if(!set.has(b))front.push(b);
+      if(!front.length)break;set.add(pick(front));
+    }
+    // make sure the active area reaches at least one port: add the shortest path to one
+    if(portCh.size&&![...set].some(id=>portCh.has(id))){
+      const prev=new Map(),q=[...set];for(const a of q)prev.set(a,null);
+      let hit=null;
+      while(q.length&&hit===null){const a=q.shift();for(const b of adj.get(a).keys())if(!prev.has(b)){prev.set(b,a);if(portCh.has(b)){hit=b;break;}q.push(b);}}
+      for(let x=hit;x!==null&&x!==undefined&&!set.has(x);x=prev.get(x))set.add(x);
+    }
+    return set;
+  }
+  // spanning tree with at most 3 tunnels per chamber; regrow the active area if that is impossible
+  let activeSet,ids,deg=new Map(),done=false;
+  for(let region=0;region<40&&!done;region++){
+    activeSet=growRegion();ids=[...activeSet];
+    const last=region===39;
+    for(let attempt=0;attempt<(last?30:15)&&!done;attempt++){
+      const cap=(last&&attempt>=20)?99:3;
+      for(let j=0;j<=G.rows;j++)L.H[j].fill('solid');
+      for(let r=0;r<G.rows;r++)L.V[r].fill('solid');
+      deg=new Map(ids.map(i=>[i,0]));
+      const inT=new Set([pick(ids)]);
+      while(inT.size<ids.length){
+        const cand=[];
+        for(const a of inT){if(deg.get(a)>=cap)continue;for(const [b,es] of adj.get(a))if(activeSet.has(b)&&!inT.has(b)&&deg.get(b)<cap)cand.push([a,b,es]);}
+        if(!cand.length)break;
+        const [a,b,es]=pick(cand);setEdge(L,pick(es),'tunnel');
+        deg.set(a,deg.get(a)+1);deg.set(b,deg.get(b)+1);inT.add(b);
+      }
+      if(inT.size===ids.length)done=true;
+    }
+  }
+  for(let r=0;r<G.rows;r++)L.active[r].fill(true);
+  for(const c of ch.list)if(!activeSet.has(c.id))for(const [r,cc] of c.cells)L.active[r][cc]=false;
+  // extra loops
+  const extra=Math.round(Math.max(0,P.loops||0)*ids.length);
+  const pairs=[];for(const a of ids)for(const [b,es] of adj.get(a))if(a<b&&activeSet.has(b))pairs.push([a,b,es]);
+  shuffle(pairs,rnd);let added=0;
+  for(const [a,b,es] of pairs){
+    if(added>=extra)break;
+    if(deg.get(a)>=3||deg.get(b)>=3)continue;
+    if(es.some(e=>getEdge(L,e)==='tunnel'))continue;
+    setEdge(L,pick(es),'tunnel');deg.set(a,deg.get(a)+1);deg.set(b,deg.get(b)+1);added++;
+  }
+  // sponges
+  const nS=Math.max(0,Math.round(P.sponges||0));
+  if(nS>0){
+    const cand=[];
+    for(const e of interiorEdges(L,ch)){
+      if(!activeSet.has(e.a)||!activeSet.has(e.b))continue;
+      if(getEdge(L,e)!=='solid')continue;
+      const len=e.type==='H'?G.cellW:G.cellH;
+      if(spongeLength(P,G,len)<8)continue;
+      let mx,my;
+      if(e.type==='H'){mx=(G.xs[e.k]+G.xs[e.k+1])/2;my=G.ys[e.j];}else{mx=G.xs[e.i];my=(G.ys[e.r]+G.ys[e.r+1])/2;}
+      const u=(mx-P.B)/G.innerW,v=(my-P.B)/G.innerH;
+      const base={left:1-u,right:u,top:1-v,bottom:v,none:0.5}[P.dampSide]??0.5;
+      cand.push({e,score:base+rnd()*(P.dampSide==='none'?1:0.25)});
+    }
+    cand.sort((x,y)=>y.score-x.score);
+    const sc=new Map();let placed=0;
+    for(const {e} of cand){
+      if(placed>=nS)break;
+      if((sc.get(e.a)||0)>=2||(sc.get(e.b)||0)>=2)continue;
+      setEdge(L,e,'sponge');sc.set(e.a,(sc.get(e.a)||0)+1);sc.set(e.b,(sc.get(e.b)||0)+1);placed++;
+    }
+  }
+  return L;
+}
+// port positions and the cell each one lands in (ignores ports that sit on a grid line)
+function portCells(G,P){
+  const out=[],clear=G.t/2+G.tunnelW/2+0.5;
+  if(P.portPitch<5)return out;
+  for(const [side,len] of [['top',P.W],['bottom',P.W],['left',P.H],['right',P.H]]){
+    for(let q=P.portOffset;q<=len-P.portOffset+1e-6;q+=P.portPitch){
+      if(q-G.tunnelW/2<P.B+1||q+G.tunnelW/2>len-P.B-1)continue;
+      const horiz=side==='top'||side==='bottom';
+      const lines=horiz?G.xs:G.ys;
+      if(lines.slice(1,-1).some(x=>Math.abs(q-x)<clear))continue;
+      const cell=horiz?[side==='top'?0:G.rows-1,Math.min(G.cols-1,Math.floor((q-P.B)/G.cellW))]
+                      :[Math.min(G.rows-1,Math.floor((q-P.B)/G.cellH)),side==='left'?0:G.cols-1];
+      out.push({side,pos:q,cell});
+    }
+  }
+  return out;
+}
+// pocket length is capped so two pockets meeting at a chamber corner can never touch
+function spongeLength(P,G,edgeLen){return Math.min(P.spongeLen,edgeLen-P.spongeD-4*G.t-1);}
+
+/* ---------------- geometry ---------------- */
+function buildGeometry(G,L,P){
+  const {t,depth,xs,ys,cols,rows,cellW,cellH,tunnelW,tunnelH}=G;
+  const B=P.B,W=P.W,H=P.H,D=P.spongeD;
+  const errors=[],warnings=[];
+  const pieces=[],sponges=[],fills=[];
+  const present=s=>s!=='none';
+  const hS=(j,k)=>stH(L,j,k), vS=(r,i)=>stV(L,r,i);
+  const lineCount={};
+  function push(orient,line,c,s,e,notches,kind,extra){
+    if(e-s<0.5){warnings.push(`Tiny wall piece dropped on ${orient}${line}.`);return null;}
+    const key=orient+line;lineCount[key]=(lineCount[key]||0)+1;
+    const pc=Object.assign({id:kind==='wall'?`${orient}${line}-${lineCount[key]}`:'',orient,c,s,e,notches:notches.slice(),kind,windows:[]},extra||{});
+    pieces.push(pc);return pc;
+  }
+  function addSponge(orient,c,uc,Ls,edge){
+    const n=sponges.length+1, id='S'+n;
+    const u0=uc-Ls/2,u1=uc+Ls/2, off=D/2+t/2;
+    const cross=orient==='H'?'V':'H';
+    const sp={id,orient,c,uc,Ls,edge,parts:[]};
+    for(const [suf,cc] of [['a',c-off],['b',c+off]]){
+      const pc=push(orient,'S',cc,u0-t,u1+t,[],'vent');
+      if(pc){pc.id=id+suf;sp.parts.push(pc);}
+    }
+    for(const [suf,cc] of [['c',u0-t/2],['d',u1+t/2]]){
+      const pc=push(cross,'S',cc,c-D/2,c+D/2,[],'cap');
+      if(pc){pc.id=id+suf;sp.parts.push(pc);}
+    }
+    sponges.push(sp);
+    const pt=orient==='H'?[uc,c]:[c,uc];
+    fills.push({x:pt[0],y:pt[1],id});
+  }
+  function runPieces(orient,line,c,a,b,s,e,segState,segCenter,cellLen){
+    let cur={s,notches:[]};
+    for(let q=a;q<b;q++){
+      const st=segState(q),uc=segCenter(q);
+      if(st==='tunnel')cur.notches.push(uc);
+      if(st==='sponge'){
+        const Ls=spongeLength(P,G,cellLen);
+        if(Ls<8){errors.push(`Sponge on ${orient}${line} does not fit: cells too small for a ${P.spongeLen}mm pocket.`);continue;}
+        push(orient,line,c,cur.s,uc-Ls/2-t,cur.notches,'wall');
+        addSponge(orient,c,uc,Ls,{orient,line,q});
+        cur={s:uc+Ls/2+t,notches:[]};
+      }
+    }
+    push(orient,line,c,cur.s,e,cur.notches,'wall');
+  }
+  // horizontal walls run straight through junctions
+  for(let j=1;j<rows;j++){
+    let k=0;
+    while(k<cols){
+      if(!present(hS(j,k))){k++;continue;}
+      const a=k;while(k<cols&&present(hS(j,k)))k++;const b=k;
+      const s=a===0?B:xs[a]-t/2, e=b===cols?W-B:xs[b]+t/2;
+      runPieces('H',j,ys[j],a,b,s,e,q=>hS(j,q),q=>(xs[q]+xs[q+1])/2,cellW);
+    }
+  }
+  // vertical walls butt against horizontal ones
+  const covered=(j,i)=>j>=1&&j<rows&&(present(hS(j,i-1))||present(hS(j,i)));
+  for(let i=1;i<cols;i++){
+    let r=0;
+    while(r<rows){
+      if(!present(vS(r,i))){r++;continue;}
+      const a=r;r++;
+      while(r<rows&&present(vS(r,i))&&!covered(r,i))r++;
+      const b=r;
+      const s=a===0?B:(covered(a,i)?ys[a]+t/2:ys[a]-t/2);
+      const e=b===rows?H-B:(covered(b,i)?ys[b]-t/2:ys[b]+t/2);
+      runPieces('V',i,xs[i],a,b,s,e,q=>vS(q,i),q=>(ys[q]+ys[q+1])/2,cellH);
+    }
+  }
+  // tabs and slots
+  const slotsFront=[],slotsBack=[];
+  const cl=P.slotClear;
+  for(const pc of pieces){
+    const len=pc.e-pc.s, m=t+1;
+    pc.top=[];pc.bot=[];
+    if(len>=P.tabL+2*m){
+      const n=Math.max(1,Math.round(len/Math.max(10,P.tabPitch)));
+      const span=len-2*m-P.tabL;
+      for(let q=0;q<n;q++)pc.top.push(m+P.tabL/2+(n===1?span/2:span*q/(n-1)));
+      const nl=pc.notches.map(x=>x-pc.s);
+      pc.bot=pc.top.filter(u=>nl.every(cx=>Math.abs(u-cx)>=P.tabL/2+tunnelW/2+1));
+    }
+    if(pc.kind==='vent'){
+      const pitch=P.slotW+2.5, a0=t+1.5, a1=len-(t+1.5);
+      for(let u=a0;u+P.slotW<=a1+1e-9;u+=pitch)pc.windows.push([u,u+P.slotW]);
+    }
+    const slot=(u)=>{
+      const g=pc.s+u;
+      return pc.orient==='H'?{x0:g-P.tabL/2-cl/2,x1:g+P.tabL/2+cl/2,y0:pc.c-t/2-cl/2,y1:pc.c+t/2+cl/2}
+                            :{x0:pc.c-t/2-cl/2,x1:pc.c+t/2+cl/2,y0:g-P.tabL/2-cl/2,y1:g+P.tabL/2+cl/2};
+    };
+    for(const u of pc.top)slotsFront.push(Object.assign(slot(u),{id:pc.id}));
+    for(const u of pc.bot)slotsBack.push(Object.assign(slot(u),{id:pc.id}));
+  }
+  // footprints
+  for(const pc of pieces){
+    pc.rect=pc.orient==='H'?{x0:pc.s,x1:pc.e,y0:pc.c-t/2,y1:pc.c+t/2}:{x0:pc.c-t/2,x1:pc.c+t/2,y0:pc.s,y1:pc.e};
+  }
+  // ports
+  const ch=chambers(L);
+  const ports=[];
+  const w=tunnelW;
+  if(P.portPitch>=5){
+    const sides=[['top',W],['bottom',W],['left',H],['right',H]];
+    for(const [side,len] of sides){
+      for(let q=P.portOffset;q<=len-P.portOffset+1e-6;q+=P.portPitch){
+        const p={side,pos:q,cut:true,why:''};
+        if(q-w/2<B+1||q+w/2>len-B-1){p.cut=false;p.why='too close to a corner';}
+        let cell;
+        if(side==='top'||side==='bottom'){
+          const c=Math.min(cols-1,Math.max(0,Math.floor((q-B)/cellW)));const r=side==='top'?0:rows-1;cell=[r,c];
+          for(let i=1;i<cols;i++)if(present(vS(r,i))&&Math.abs(q-xs[i])<t/2+w/2+0.5){p.cut=false;p.why='lands on a wall';}
+        }else{
+          const r=Math.min(rows-1,Math.max(0,Math.floor((q-B)/cellH)));const c=side==='left'?0:cols-1;cell=[r,c];
+          for(let j=1;j<rows;j++)if(present(hS(j,c))&&Math.abs(q-ys[j])<t/2+w/2+0.5){p.cut=false;p.why='lands on a wall';}
+        }
+        p.cell=cell;p.chamber=ch.id[cell[0]][cell[1]];p.active=L.active[cell[0]][cell[1]];
+        ports.push(p);
+      }
+    }
+  }
+  ports.forEach((p,i)=>p.id='P'+(i+1));
+  // frame pieces
+  const sideIdx={top:0,right:1,bottom:2,left:3};
+  const cuts=ports.filter(p=>p.cut).map(p=>{
+    const s=sideIdx[p.side];const q=s===0||s===1?p.pos:(s===2?W-p.pos:H-p.pos);return {side:s,q};
+  });
+  const frame=framePieces(W,H,B,cuts,w);
+  // bolts
+  const bolts=[];
+  const portNear=(side,pos)=>ports.some(p=>p.cut&&p.side===side&&Math.abs(p.pos-pos)<w/2+P.boltD/2+1.5);
+  const hb=B/2;
+  for(const [x,y] of [[hb,hb],[W-hb,hb],[W-hb,H-hb],[hb,H-hb]])bolts.push({x,y});
+  for(const [side,len] of [['top',W],['bottom',W],['left',H],['right',H]]){
+    const span=len-2*hb;const n=Math.max(1,Math.ceil(span/Math.max(10,P.boltSpacing)));
+    for(let m=1;m<n;m++){
+      let pos=hb+span*m/n;
+      if(portNear(side,pos)){
+        const alt=[pos-(w/2+P.boltD/2+3),pos+(w/2+P.boltD/2+3)].find(a=>!portNear(side,a));
+        if(alt===undefined)continue;pos=alt;
+      }
+      if(side==='top')bolts.push({x:pos,y:hb});else if(side==='bottom')bolts.push({x:pos,y:H-hb});
+      else if(side==='left')bolts.push({x:hb,y:pos});else bolts.push({x:W-hb,y:pos});
+    }
+  }
+  if(P.boltD>B-4)errors.push(`Bolt holes (${P.boltD}mm) are too big for a ${B}mm border.`);
+  // air vents
+  const vents=[];
+  const vg=Math.max(0,Math.round(P.ventGrid||0)), vp=Math.max(P.ventD*3,4);
+  if(vg>0)for(const c of ch.list){
+    if(!c.active)continue;
+    const [cx,cy]=chamberCenter(G,c);
+    for(let a=0;a<vg;a++)for(let b=0;b<vg;b++)vents.push({x:cx+(a-(vg-1)/2)*vp,y:cy+(b-(vg-1)/2)*vp});
+  }
+  // sanity checks
+  if(depth<=0)errors.push('Depth must be above 0.');
+  if(tunnelH>=depth-1)errors.push(`Tunnel height ${f1(tunnelH)}mm leaves no bridge above it (depth ${f1(depth)}mm).`);
+  if(tunnelW+4>Math.min(cellW,cellH)-t)errors.push(`Tunnels (${f1(tunnelW)}mm) are too wide for ${f1(Math.min(cellW,cellH))}mm cells.`);
+  if(Math.min(cellW,cellH)<3*t+P.tabL)warnings.push('Cells are very small for this wall thickness and tab length.');
+  const maxLen=Math.max(P.stockW,P.stockH)-10;
+  for(const pc of pieces)if(pc.e-pc.s>maxLen)errors.push(`${pc.id} is ${f1(pc.e-pc.s)}mm long, longer than the strip stock sheet.`);
+  if(depth+2*P.S+10>Math.min(P.stockW,P.stockH))errors.push('Strip stock sheet is too small for one strip.');
+  // overlap self-check
+  const eps=1e-6;
+  for(const pc of pieces){
+    const r=pc.rect;
+    if(r.x0<B-eps||r.x1>W-B+eps||r.y0<B-eps||r.y1>H-B+eps)errors.push(`Geometry: ${pc.id} pokes into the border.`);
+  }
+  for(let a=0;a<pieces.length;a++)for(let b=a+1;b<pieces.length;b++){
+    const p=pieces[a].rect,q=pieces[b].rect;
+    const ox=Math.min(p.x1,q.x1)-Math.max(p.x0,q.x0), oy=Math.min(p.y1,q.y1)-Math.max(p.y0,q.y0);
+    if(ox>1e-4&&oy>1e-4)errors.push(`Geometry: ${pieces[a].id} overlaps ${pieces[b].id}.`);
+  }
+  return {pieces,sponges,fills,slotsFront,slotsBack,ports,frame,bolts,vents,errors,warnings,ch};
+}
+
+function framePieces(W,H,B,cuts,w){
+  const outerPt=(s,q)=>[[q,0],[W,q],[W-q,H],[0,H-q]][s];
+  const innerPt=(s,q)=>[[q,B],[W-B,q],[W-q,H-B],[B,H-q]][s];
+  const outerEnd=[[W,0],[W,H],[0,H],[0,0]], innerEnd=[[W-B,B],[W-B,H-B],[B,H-B],[B,B]];
+  if(!cuts.length)return [{poly:rectPts(0,0,W,H),hole:rectPts(B,B,W-B,H-B)}];
+  const off=[0,W,W+H,2*W+H];
+  const cs=cuts.map(c=>({side:c.side,a:c.q-w/2,b:c.q+w/2,g:off[c.side]+c.q})).sort((x,y)=>x.g-y.g);
+  const out=[];
+  for(let n=0;n<cs.length;n++){
+    const A=cs[n],Bc=cs[(n+1)%cs.length];
+    const outer=[outerPt(A.side,A.b)],inner=[innerPt(A.side,A.b)];
+    let s=A.side;
+    if(!(s===Bc.side&&Bc.a>=A.b&&cs.length>1)){
+      let steps=0;
+      do{outer.push(outerEnd[s]);inner.push(innerEnd[s]);s=(s+1)%4;steps++;}while(s!==Bc.side&&steps<5);
+    }
+    outer.push(outerPt(Bc.side,Bc.a));inner.push(innerPt(Bc.side,Bc.a));
+    out.push({poly:outer.concat(inner.reverse())});
+  }
+  return out;
+}
+
+/* ---------------- rules ---------------- */
+function checkRules(G,L,P,geo){
+  const msgs=[];const bad=new Set();
+  const ch=geo.ch;
+  const act=ch.list.filter(c=>c.active);
+  if(!act.length)msgs.push(['error','No active chambers.']);
+  const edges=interiorEdges(L,ch);
+  const deg=new Map(),spc=new Map(),adjT=new Map();
+  for(const c of ch.list){deg.set(c.id,0);spc.set(c.id,0);adjT.set(c.id,[]);}
+  const isAct=id=>ch.list[id].active;
+  let toInactive=0;
+  for(const e of edges){
+    const s=getEdge(L,e);
+    if(s==='tunnel'){
+      deg.set(e.a,deg.get(e.a)+1);deg.set(e.b,deg.get(e.b)+1);
+      adjT.get(e.a).push(e.b);adjT.get(e.b).push(e.a);
+      if(isAct(e.a)!==isAct(e.b)){toInactive++;bad.add(isAct(e.a)?e.a:e.b);}
+    }
+    if(s==='sponge'){spc.set(e.a,spc.get(e.a)+1);spc.set(e.b,spc.get(e.b)+1);}
+  }
+  if(toInactive)msgs.push(['error',`${toInactive} tunnel(s) lead into a sealed chamber.`]);
+  if(act.length>1){
+    const seen=new Set([act[0].id]),st=[act[0].id];
+    while(st.length){const a=st.pop();for(const b of adjT.get(a))if(isAct(b)&&!seen.has(b)){seen.add(b);st.push(b);}}
+    const lost=act.filter(c=>!seen.has(c.id));
+    if(lost.length){msgs.push(['error',`${lost.length} chamber(s) cannot be reached from the rest.`]);lost.forEach(c=>bad.add(c.id));}
+    let lo=0,hi=0;
+    for(const c of act){const d=deg.get(c.id);if(d<1){lo++;bad.add(c.id);}if(d>3){hi++;bad.add(c.id);}}
+    if(lo)msgs.push(['error',`${lo} chamber(s) have no tunnel.`]);
+    if(hi)msgs.push(['error',`${hi} chamber(s) have more than 3 tunnels.`]);
+  }
+  let sp=0;for(const c of ch.list)if(spc.get(c.id)>2){sp++;bad.add(c.id);}
+  if(sp)msgs.push(['error',`${sp} chamber(s) have more than 2 sponges.`]);
+  const blocked=geo.ports.filter(p=>!p.cut);
+  if(blocked.length)msgs.push(['warn',`${blocked.length} port(s) skipped (${[...new Set(blocked.map(p=>p.why))].join(', ')}). Shown as red crosses.`]);
+  const live=geo.ports.filter(p=>p.cut&&p.active);
+  if(!live.length&&act.length)msgs.push(['error','No port opens into an active chamber, so the nest has no entrance.']);
+  const plugs=geo.ports.filter(p=>p.cut).length;
+  if(plugs)msgs.push(['info',`${plugs} port(s) are cut. Plug every port you are not using (${live.length} open into active chambers).`]);
+  for(const e of geo.errors)msgs.push(['error',e]);
+  for(const w of geo.warnings)msgs.push(['warn',w]);
+  const ok=!msgs.some(m=>m[0]==='error');
+  if(ok)msgs.unshift(['ok','All rules pass. Ready to export.']);
+  return {msgs,ok,bad,deg,spc};
+}
+
+/* ---------------- polygon offset (orthogonal polygons) ---------------- */
+function cleanPoly(pts){
+  let p=[];
+  for(const q of pts){const l=p[p.length-1];if(!l||Math.abs(l[0]-q[0])>1e-9||Math.abs(l[1]-q[1])>1e-9)p.push(q);}
+  if(p.length>1){const a=p[0],b=p[p.length-1];if(Math.abs(a[0]-b[0])<1e-9&&Math.abs(a[1]-b[1])<1e-9)p.pop();}
+  let changed=true;
+  while(changed&&p.length>3){
+    changed=false;
+    for(let i=0;i<p.length;i++){
+      const a=p[(i-1+p.length)%p.length],b=p[i],c=p[(i+1)%p.length];
+      const cr=(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]);
+      if(Math.abs(cr)<1e-9){p.splice(i,1);changed=true;break;}
+    }
+  }
+  return p;
+}
+function offsetPoly(pts,d){
+  const p=cleanPoly(pts);if(!d)return p;
+  let area=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];area+=a[0]*b[1]-b[0]*a[1];}
+  const sgn=area>0?1:-1;
+  const nrm=[];
+  for(let i=0;i<p.length;i++){
+    const a=p[i],b=p[(i+1)%p.length];let dx=b[0]-a[0],dy=b[1]-a[1];const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
+    nrm.push([sgn*dy,-sgn*dx]);
+  }
+  return p.map((q,i)=>{const n0=nrm[(i-1+p.length)%p.length],n1=nrm[i];return [q[0]+d*(n0[0]+n1[0]),q[1]+d*(n0[1]+n1[1])];});
+}
+const polyD=pts=>'M'+pts.map(q=>fmt(q[0])+' '+fmt(q[1])).join(' L')+' Z';
+
+/* ---------------- strip flat outline ---------------- */
+function stripOutline(pc,G,P){
+  const len=pc.e-pc.s,dep=G.depth,S=P.S,tl=P.tabL;
+  const pts=[[0,0]];
+  for(const u of pc.top.slice().sort((a,b)=>a-b)){pts.push([u-tl/2,0],[u-tl/2,-S],[u+tl/2,-S],[u+tl/2,0]);}
+  pts.push([len,0],[len,dep]);
+  const feats=[];
+  for(const u of pc.bot)feats.push({a:u-tl/2,b:u+tl/2,y:dep+S});
+  for(const n of pc.notches){const u=n-pc.s;feats.push({a:u-G.tunnelW/2,b:u+G.tunnelW/2,y:dep-G.tunnelH});}
+  feats.sort((x,y)=>y.a-x.a);
+  for(const f of feats)pts.push([f.b,dep],[f.b,f.y],[f.a,f.y],[f.a,dep]);
+  pts.push([0,dep]);
+  return pts;
+}
+
+/* ---------------- top-down drawing ---------------- */
+function drawTopdown(G,L,P,geo,rules,opts){
+  const {W,H}=P,{t,xs,ys,cols,rows}=G;
+  const o=[];
+  o.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -4 ${fmt(W+8)} ${fmt(H+8)}"${opts.mm?` width="${fmt(W+8)}mm" height="${fmt(H+8)}mm"`:''} font-family="system-ui,Arial,sans-serif">`);
+  o.push(`<defs><pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" fill="#8a8a86"/><line x1="0" y1="0" x2="0" y2="4" stroke="#6f6f6b" stroke-width="1.6"/></pattern></defs>`);
+  o.push(`<rect x="0" y="0" width="${fmt(W)}" height="${fmt(H)}" fill="#dfe4e5"/>`);
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const fill=L.active[r][c]?'#e9d5a6':'url(#hatch)';
+    o.push(`<rect x="${fmt(xs[c])}" y="${fmt(ys[r])}" width="${fmt(xs[c+1]-xs[c])}" height="${fmt(ys[r+1]-ys[r])}" fill="${fill}"/>`);
+  }
+  for(const sp of geo.sponges){
+    const D=P.spongeD,L2=sp.Ls/2;
+    const r=sp.orient==='H'?[sp.uc-L2,sp.c-D/2,sp.Ls,D]:[sp.c-D/2,sp.uc-L2,D,sp.Ls];
+    o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="#4a90d9"/>`);
+  }
+  for(const f of geo.frame){
+    o.push(`<path d="${polyD(f.poly)}${f.hole?' '+polyD(f.hole):''}" fill="#b9c3c6" fill-rule="evenodd" stroke="#7d898c" stroke-width="0.4"/>`);
+  }
+  for(const pc of geo.pieces){
+    const r=pc.rect;
+    o.push(`<rect x="${fmt(r.x0)}" y="${fmt(r.y0)}" width="${fmt(r.x1-r.x0)}" height="${fmt(r.y1-r.y0)}" fill="${pc.kind==='wall'?'#5b4fc4':'#3c6fb0'}"/>`);
+  }
+  // tunnel openings
+  const tw=G.tunnelW;
+  for(const pc of geo.pieces)for(const n of pc.notches){
+    const r=pc.orient==='H'?[n-tw/2,pc.c-t/2-0.6,tw,t+1.2]:[pc.c-t/2-0.6,n-tw/2,t+1.2,tw];
+    o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="#2fb37a"/>`);
+  }
+  // ports
+  for(const p of geo.ports){
+    let x,y;
+    if(p.side==='top'){x=p.pos;y=P.B/2;}else if(p.side==='bottom'){x=p.pos;y=H-P.B/2;}else if(p.side==='left'){x=P.B/2;y=p.pos;}else{x=W-P.B/2;y=p.pos;}
+    if(!p.cut){o.push(`<path d="M${fmt(x-2.5)} ${fmt(y-2.5)} L${fmt(x+2.5)} ${fmt(y+2.5)} M${fmt(x+2.5)} ${fmt(y-2.5)} L${fmt(x-2.5)} ${fmt(y+2.5)}" stroke="#e5484d" stroke-width="1.2"/>`);continue;}
+    const horiz=p.side==='top'||p.side==='bottom';
+    const r=horiz?[p.pos-tw/2,p.side==='top'?0:H-P.B,tw,P.B]:[p.side==='left'?0:W-P.B,p.pos-tw/2,P.B,tw];
+    o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="${p.active?'#2fb37a':'#9aa3a5'}"/>`);
+    if(opts.labels)o.push(`<text x="${fmt(horiz?p.pos:(p.side==='left'?-2:W+2))}" y="${fmt(horiz?(p.side==='top'?-1:H+3.5):p.pos)}" font-size="3" text-anchor="${horiz?'middle':(p.side==='left'?'end':'start')}" fill="#333">${p.id}</text>`);
+  }
+  for(const b of geo.bolts)o.push(`<circle cx="${fmt(b.x)}" cy="${fmt(b.y)}" r="${fmt(P.boltD/2)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);
+  for(const v of geo.vents)o.push(`<circle cx="${fmt(v.x)}" cy="${fmt(v.y)}" r="${fmt(Math.max(0.35,P.ventD/2))}" fill="#9b8a63"/>`);
+  for(const f of geo.fills)o.push(`<circle cx="${fmt(f.x)}" cy="${fmt(f.y)}" r="${fmt(P.fillD/2)}" fill="none" stroke="#fff" stroke-width="0.6"/>`);
+  // problems
+  if(rules)for(const id of rules.bad){
+    const c=geo.ch.list[id];if(!c)continue;
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for(const [r,cc] of c.cells){x0=Math.min(x0,xs[cc]);x1=Math.max(x1,xs[cc+1]);y0=Math.min(y0,ys[r]);y1=Math.max(y1,ys[r+1]);}
+    o.push(`<rect x="${fmt(x0+2)}" y="${fmt(y0+2)}" width="${fmt(x1-x0-4)}" height="${fmt(y1-y0-4)}" fill="none" stroke="#e5484d" stroke-width="1.4" stroke-dasharray="3 2"/>`);
+  }
+  if(opts.labels){
+    for(const pc of geo.pieces){
+      if(pc.kind!=='wall')continue;
+      const r=pc.rect,cx=(r.x0+r.x1)/2,cy=(r.y0+r.y1)/2;
+      const rot=pc.orient==='V'?` transform="rotate(-90 ${fmt(cx)} ${fmt(cy)})"`:'';
+      o.push(`<text x="${fmt(cx)}" y="${fmt(cy+0.9)}" font-size="2.6" text-anchor="middle" fill="#fff"${rot}>${pc.id}</text>`);
+    }
+    for(const sp of geo.sponges){const pt=sp.orient==='H'?[sp.uc,sp.c]:[sp.c,sp.uc];o.push(`<text x="${fmt(pt[0])}" y="${fmt(pt[1]+0.9)}" font-size="2.6" text-anchor="middle" fill="#fff">${sp.id}</text>`);}
+  }
+  if(opts.interactive){
+    // hit areas
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)
+      o.push(`<rect data-cell="${r},${c}" x="${fmt(xs[c])}" y="${fmt(ys[r])}" width="${fmt(xs[c+1]-xs[c])}" height="${fmt(ys[r+1]-ys[r])}" fill="transparent"/>`);
+    if(opts.tool==='wall'){
+      const hw=Math.max(4,t*2);
+      for(let j=1;j<rows;j++)for(let k=0;k<cols;k++){if(stH(L,j,k)==='none')continue;
+        o.push(`<rect data-edge="H,${j},${k}" x="${fmt(xs[k]+t)}" y="${fmt(ys[j]-hw)}" width="${fmt(xs[k+1]-xs[k]-2*t)}" height="${fmt(2*hw)}" fill="transparent" style="cursor:pointer"/>`);}
+      for(let r=0;r<rows;r++)for(let i=1;i<cols;i++){if(stV(L,r,i)==='none')continue;
+        o.push(`<rect data-edge="V,${r},${i}" x="${fmt(xs[i]-hw)}" y="${fmt(ys[r]+t)}" width="${fmt(2*hw)}" height="${fmt(ys[r+1]-ys[r]-2*t)}" fill="transparent" style="cursor:pointer"/>`);}
+    }
+  }
+  o.push('</svg>');
+  return o.join('');
+}
+
+/* ---------------- export ---------------- */
+function svgDoc(w,h,body,title){
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(w)}mm" height="${fmt(h)}mm" viewBox="0 0 ${fmt(w)} ${fmt(h)}">\n<title>${title}</title>\n${body}\n</svg>\n`;
+}
+function exporters(G,L,P,geo){
+  const k2=P.kerf/2, cut=`fill="none" stroke="${P.cutColor}" stroke-width="0.01"`;
+  const cutPoly=(pts,d,tx=0,ty=0)=>`<path d="${polyD(offsetPoly(pts,d).map(q=>[q[0]+tx,q[1]+ty]))}" ${cut}/>`;
+  const hole=(x,y,dia)=>`<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(Math.max(0.05,dia/2-k2))}" ${cut}/>`;
+  const txt=(x,y,s,size,rot)=>`<text x="${fmt(x)}" y="${fmt(y)}" font-size="${fmt(size)}" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" fill="${P.engraveColor}" stroke="none"${rot?` transform="rotate(${rot} ${fmt(x)} ${fmt(y)})"`:''}>${s}</text>`;
+  const W=P.W,H=P.H;
+  const files=[];
+  function sheet(name,slots,fillHere,vents,label){
+    const b=[];
+    b.push(cutPoly(rectPts(0,0,W,H),k2));
+    for(const s of slots)b.push(cutPoly(rectPts(s.x0,s.y0,s.x1,s.y1),-k2));
+    for(const o of geo.bolts)b.push(hole(o.x,o.y,P.boltD));
+    if(vents)for(const v of geo.vents)b.push(hole(v.x,v.y,P.ventD));
+    if(fillHere)for(const f of geo.fills)b.push(hole(f.x,f.y,P.fillD));
+    if(P.engraveIds)b.push(txt(W/2,P.B/2,label,Math.min(4,P.B*0.35)));
+    files.push({name,data:svgDoc(W,H,b.join('\n'),label)});
+  }
+  sheet('front-sheet.svg',geo.slotsFront,P.fillSide!=='back',true,'FRONT (outside face up, top edge)');
+  sheet('back-sheet.svg',geo.slotsBack,P.fillSide!=='front',false,'BACK (inside face up, top edge)');
+  // frame layer
+  {
+    const b=[];
+    for(const f of geo.frame){b.push(cutPoly(f.poly,k2));if(f.hole)b.push(cutPoly(f.hole,-k2));}
+    for(const o of geo.bolts)b.push(hole(o.x,o.y,P.boltD));
+    files.push({name:`frame-layer-cut-x${P.layers}.svg`,data:svgDoc(W,H,b.join('\n'),`Frame layer, cut ${P.layers} times`)});
+  }
+  // strips nested onto stock sheets
+  const parts=geo.pieces.map(pc=>({pc,w:pc.e-pc.s,h:G.depth+2*P.S})).sort((a,b)=>b.w-a.w);
+  const margin=5,gap=2+P.kerf;
+  const sheets=[];let cur=null,x=0,y=0,rowH=0;
+  const newSheet=()=>{cur=[];sheets.push(cur);x=margin;y=margin;rowH=0;};
+  newSheet();
+  for(const it of parts){
+    if(x+it.w>P.stockW-margin){x=margin;y+=rowH+gap;rowH=0;}
+    if(y+it.h>P.stockH-margin){newSheet();}
+    cur.push({it,x,y});x+=it.w+gap;rowH=Math.max(rowH,it.h);
+  }
+  sheets.forEach((sh,i)=>{
+    const b=[];
+    for(const {it,x,y} of sh){
+      const pc=it.pc,ty=y+P.S;
+      b.push(cutPoly(stripOutline(pc,G,P),k2,x,ty));
+      for(const [a0,a1] of pc.windows)b.push(cutPoly(rectPts(a0,2,a1,G.depth-2),-k2,x,ty));
+      if(P.engraveIds&&pc.kind==='wall'&&it.w>=14){
+        const label=pc.id;
+        let lx=x+it.w/2;
+        const nl=pc.notches.map(n=>n-pc.s);
+        if(nl.some(n=>Math.abs(n-it.w/2)<G.tunnelW/2+6))lx=x+Math.min(it.w-8,Math.max(8,it.w/4));
+        b.push(txt(lx,ty+Math.min(3,G.depth/4),label,Math.min(2.6,G.depth/4)));
+      }
+    }
+    files.push({name:`strips-sheet-${i+1}.svg`,data:svgDoc(P.stockW,P.stockH,b.join('\n'),`Wall strips, sheet ${i+1} of ${sheets.length}`)});
+  });
+  const asm=drawTopdown(G,L,P,geo,null,{labels:true,mm:true});
+  files.push({name:'assembly-map.svg',data:`<?xml version="1.0" encoding="UTF-8"?>\n`+asm});
+  return {files,stripSheets:sheets.length};
+}
+
+/* ---------------- app state ---------------- */
+let P,G,L,geo,rules,tool='wall',history=[];
+const TOOLHELP={
+  wall:'Tap a wall to cycle solid, tunnel, sponge.',
+  cell:'Tap a chamber to switch it on or off. Off chambers are sealed and their tunnels close.',
+  merge:'Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it.'
+};
+function snapshot(){history.push(JSON.stringify(L));if(history.length>60)history.shift();}
+function regenerate(){if(L)snapshot();G=derive(P);L=generate(G,P);}
+function onParamChange(k){
+  P=readParams();
+  const g=derive(P);
+  if(GEN_KEYS.has(k)||!L||g.cols!==L.cols||g.rows!==L.rows){regenerate();}
+  render();
+}
+function render(){
+  G=derive(P);
+  if(!L||L.cols!==G.cols||L.rows!==G.rows){L=generate(G,P);}
+  geo=buildGeometry(G,L,P);
+  rules=checkRules(G,L,P,geo);
+  document.getElementById('preview').innerHTML=drawTopdown(G,L,P,geo,rules,{interactive:true,tool});
+  document.getElementById('toolhelp').textContent=TOOLHELP[tool];
+  document.getElementById('checks').innerHTML=rules.msgs.map(([lv,m])=>`<div class="msg ${lv}">${m}</div>`).join('');
+  const act=geo.ch.list.filter(c=>c.active);
+  let tunnels=0,spongesN=0;
+  for(const e of interiorEdges(L,geo.ch)){const s=getEdge(L,e);if(s==='tunnel')tunnels++;if(s==='sponge')spongesN++;}
+  const ex=exporters(G,L,P,geo);
+  const stripLen=geo.pieces.reduce((a,p)=>a+(p.e-p.s),0);
+  const st=[
+    ['Grid',`${G.cols} x ${G.rows} cells`],['Cell size',`${f1(G.cellW)} x ${f1(G.cellH)} mm`],
+    ['Chamber inside',`about ${f1(G.cellW-G.t)} x ${f1(G.cellH-G.t)} mm`],['Depth',`${f1(G.depth)} mm`],
+    ['Tunnels',`${f1(G.tunnelW)} wide x ${f1(G.tunnelH)} high`],['Chambers active',`${act.length} of ${geo.ch.list.length}`],
+    ['Tunnels / sponges',`${tunnels} / ${spongesN}`],['Strip parts',`${geo.pieces.length} (${f1(stripLen/1000)} m)`],
+    ['Strip stock sheets',`${ex.stripSheets} at ${P.stockW} x ${P.stockH}`],['Frame',`${geo.frame.length} pieces x ${P.layers} layers`],
+    ['Bolts',`${geo.bolts.length}`],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
+  ];
+  document.getElementById('stats').innerHTML=st.map(([a,b])=>`<div><span>${a}:</span> ${b}</div>`).join('');
+  document.getElementById('derived').textContent=`Pitch target ${f1(G.pitch)}mm, actual cells ${f1(G.cellW)} x ${f1(G.cellH)}mm, tunnels ${f1(G.tunnelW)}mm wide, depth ${f1(G.depth)}mm.${G.adjusted?' Cell count nudged so ports miss the walls.':''}`;
+  const exDiv=document.getElementById('exports');
+  exDiv.innerHTML=ex.files.map((f,i)=>`<button data-file="${i}"${rules.ok?'':' disabled'}>${f.name}</button>`).join('')+
+    `<button id="zipAll" class="primary"${rules.ok&&window.JSZip?'':' disabled'}>All as .zip</button>`;
+  exDiv._files=ex.files;
+  if(!rules.ok)setStatus('Fix the errors in Checks to enable export.');
+  else if(!window.JSZip)setStatus('Files can be saved one at a time (zip support did not load).');
+  else setStatus('');
+}
+function setStatus(s){document.getElementById('status').textContent=s;}
+
+/* ---------------- editing ---------------- */
+function onPreviewClick(ev){
+  const el=ev.target.closest('[data-edge],[data-cell]');if(!el)return;
+  if(tool==='wall'&&el.dataset.edge){
+    const [type,a,b]=el.dataset.edge.split(',');
+    const e=type==='H'?{type,j:+a,k:+b}:{type,r:+a,i:+b};
+    const cur=getEdge(L,e);if(cur==='none')return;
+    snapshot();setEdge(L,e,{solid:'tunnel',tunnel:'sponge',sponge:'solid'}[cur]);render();return;
+  }
+  if(!el.dataset.cell)return;
+  const [r,c]=el.dataset.cell.split(',').map(Number);
+  if(tool==='cell'){
+    snapshot();
+    const ch=chambers(L),id=ch.id[r][c],cham=ch.list[id];
+    const on=!cham.active;
+    for(const [rr,cc] of cham.cells)L.active[rr][cc]=on;
+    if(!on)for(const e of interiorEdges(L,ch))if((e.a===id||e.b===id)&&getEdge(L,e)!=='solid')setEdge(L,e,'solid');
+    render();return;
+  }
+  if(tool==='merge'){
+    const mi=mergeOf(L,r,c);
+    snapshot();
+    if(mi>=0){L.merges.splice(mi,1);render();return;}
+    if(L.cols<2||L.rows<2){history.pop();return;}
+    const r0=Math.min(r,L.rows-2),c0=Math.min(c,L.cols-2);
+    if(L.merges.some(m=>Math.abs(m.r-r0)<2&&Math.abs(m.c-c0)<2)){history.pop();setStatus('That would overlap another brood chamber.');return;}
+    L.merges.push({r:r0,c:c0});
+    for(let dr=0;dr<2;dr++)for(let dc=0;dc<2;dc++)L.active[r0+dr][c0+dc]=true;
+    render();
+  }
+}
+
+/* ---------------- saving ---------------- */
+let dlNS;
+async function getDl(){
+  if(dlNS!==undefined)return dlNS;
+  try{dlNS=(window.claude&&typeof window.claude.use==='function')?await window.claude.use('downloads'):null;}catch(e){dlNS=null;}
+  return dlNS;
+}
+async function saveFile(name,data){
+  const d=await getDl();
+  if(d){
+    try{await d.save({filename:name,data});setStatus('Saved '+name+'.');}
+    catch(e){setStatus(e&&e.code==='declined'?'Save cancelled.':'Could not save '+name+': '+((e&&(e.message||e.code))||'unknown error'));}
+    return;
+  }
+  const blob=data instanceof Blob?data:new Blob([data],{type:name.endsWith('.json')?'application/json':'image/svg+xml'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+  setStatus('Downloaded '+name+'.');
+}
+
+/* ---------------- wiring ---------------- */
+function init(){
+  buildForm();
+  P=readParams();
+  render();
+  document.getElementById('preview').addEventListener('click',onPreviewClick);
+  document.querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>{
+    tool=b.dataset.tool;document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x===b));render();
+  }));
+  document.getElementById('undo').addEventListener('click',()=>{if(!history.length){setStatus('Nothing to undo.');return;}L=JSON.parse(history.pop());render();});
+  document.getElementById('regen').addEventListener('click',()=>{P=readParams();regenerate();render();});
+  document.getElementById('reseed').addEventListener('click',()=>{
+    const f=ALL_FIELDS.find(x=>x.k==='seed');setField(f,Math.floor(Math.random()*100000));P=readParams();regenerate();render();
+  });
+  document.getElementById('exports').addEventListener('click',async ev=>{
+    const div=ev.currentTarget,b=ev.target.closest('button');if(!b||b.disabled)return;
+    if(b.id==='zipAll'){
+      try{
+        const zip=new window.JSZip();for(const f of div._files)zip.file(f.name,f.data);
+        zip.file('layout.json',layoutJSON());
+        const blob=await zip.generateAsync({type:'blob'});
+        await saveFile(`nest-${P.W}x${P.H}-seed${P.seed}.zip`,blob);
+      }catch(e){setStatus('Zip failed: '+e.message);}
+      return;
+    }
+    const f=div._files[+b.dataset.file];if(f)await saveFile(f.name,f.data);
+  });
+  document.getElementById('saveLayout').addEventListener('click',()=>saveFile(`nest-layout-${P.W}x${P.H}.json`,layoutJSON()));
+  const fi=document.getElementById('loadLayout');
+  document.getElementById('loadBtn').addEventListener('click',()=>fi.click());
+  fi.addEventListener('change',async()=>{
+    const file=fi.files[0];if(!file)return;
+    try{
+      const j=JSON.parse(await file.text());
+      if(!j.layout||!j.params)throw new Error('not a layout file');
+      for(const f of ALL_FIELDS)if(f.k in j.params)setField(f,j.params[f.k]);
+      P=readParams();snapshot();L=j.layout;render();setStatus('Loaded '+file.name+'.');
+    }catch(e){setStatus('Could not load: '+e.message);}
+    fi.value='';
+  });
+  const s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+  s.onload=()=>render();s.onerror=()=>{};
+  document.head.appendChild(s);
+}
+function layoutJSON(){return JSON.stringify({app:'ant-nest-panel-generator',version:1,params:P,layout:L},null,1);}
+window.__nest={get state(){return {P,G,L,geo,rules};},derive,generate,buildGeometry,checkRules,exporters,offsetPoly,stripOutline};
+init();
+</script>
+</body>
+</html>
