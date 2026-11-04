@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ant nest panel generator</title>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1f1e1c;--muted:#6b6a65;--line:#d9d6cf;--accent:#5b4fc4;--err:#c0392b;--warn:#b7791f;--ok:#2f855a}
+@media (prefers-color-scheme:dark){:root{--bg:#1b1b1a;--card:#262624;--ink:#ecebe7;--muted:#a3a19a;--line:#3a3936;--accent:#9d93f0;--err:#ef6b5b;--warn:#e0a84a;--ok:#5cc28c}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:12px 16px;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0;font-weight:600}
+.sub{color:var(--muted);font-size:13px}
+.wrap{display:grid;grid-template-columns:350px 1fr;gap:12px;padding:12px;align-items:start}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}main{order:-1}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+details>summary{cursor:pointer;font-weight:600;padding:2px 0}
+.field{display:grid;grid-template-columns:1fr 110px;gap:4px 8px;align-items:center;margin:7px 0}
+.field label{font-size:13px}
+.field small{grid-column:1/-1;color:var(--muted);font-size:12px;margin-top:-2px}
+input,select{width:100%;padding:5px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+input[type=checkbox]{width:auto;justify-self:start}
+input[type=color]{height:30px;padding:2px}
+button{font:inherit;padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tools button.on{outline:2px solid var(--accent);outline-offset:1px}
+#preview svg{width:100%;height:auto;display:block;touch-action:manipulation;margin-top:8px}
+.msg{font-size:13px;margin:3px 0}
+.msg.error{color:var(--err)}.msg.warn{color:var(--warn)}.msg.ok{color:var(--ok)}.msg.info{color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:3px 14px;font-size:13px;margin-top:4px}
+.stats span{color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted);margin-top:6px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:1px solid rgba(0,0,0,.2)}
+#status{font-size:13px;color:var(--muted);min-height:18px;margin-top:6px}
+.derived{font-size:12px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ant nest panel generator</h1>
+  <div class="sub">v1: acrylic strip-wall nest panels for a CO2 laser. Wang-tile layout, shared walls, tab-and-slot assembly.</div>
+</header>
+<div class="wrap">
+  <aside id="controls"></aside>
+  <main>
+    <div class="card">
+      <div class="row tools" id="tools">
+        <span>Edit:</span>
+        <button data-tool="wall" class="on">Walls</button>
+        <button data-tool="cell">Chambers on/off</button>
+        <button data-tool="merge">Brood 2x2</button>
+        <button id="undo">Undo</button>
+        <span style="flex:1"></span>
+        <button id="reseed">New seed</button>
+        <button id="regen" class="primary">Generate layout</button>
+      </div>
+      <div id="toolhelp" class="msg info"></div>
+      <div id="preview"></div>
+      <div class="legend">
+        <span><i class="sw" style="background:#e9d5a6"></i>Chamber</span>
+        <span><i class="sw" style="background:#8a8a86"></i>Inactive (sealed)</span>
+        <span><i class="sw" style="background:#5b4fc4"></i>Wall strip</span>
+        <span><i class="sw" style="background:#2fb37a"></i>Tunnel</span>
+        <span><i class="sw" style="background:#4a90d9"></i>Sponge pocket</span>
+        <span><i class="sw" style="background:#b9c3c6"></i>Frame</span>
+        <span><i class="sw" style="background:#e5484d"></i>Problem</span>
+      </div>
+    </div>
+    <div class="card"><b>Checks</b><div id="checks"></div></div>
+    <div class="card"><b>Summary</b><div id="stats" class="stats"></div></div>
+    <div class="card"><b>Export cut files (SVG, mm)</b>
+      <div class="msg info">Red = cut, black = engrave (change below). Kerf is already applied. Every file is drawn at 1:1 in millimetres.</div>
+      <div class="row" id="exports" style="margin-top:6px"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="saveLayout">Save layout (.json)</button>
+        <button id="loadBtn">Load layout</button>
+        <input type="file" id="loadLayout" accept=".json,application/json" hidden>
+      </div>
+      <div id="status"></div>
+    </div>
+  </main>
+</div>
+<script>
+/*__BUNDLE__*/
+</script>
+</body>
+</html>
