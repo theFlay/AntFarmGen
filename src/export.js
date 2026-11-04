@@ -4,8 +4,19 @@ import {stripOutline} from './strip.js';
 import {drawTopdown} from './draw.js';
 /* ---------------- export ---------------- */
 export function svgDoc(w,h,body,title){
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(w)}mm" height="${fmt(h)}mm" viewBox="0 0 ${fmt(w)} ${fmt(h)}">\n<title>${title}</title>\n${body}\n</svg>\n`;
+  // 1mm of padding keeps kerf-offset outlines inside the viewBox
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(w+2)}mm" height="${fmt(h+2)}mm" viewBox="-1 -1 ${fmt(w+2)} ${fmt(h+2)}">\n<title>${title}</title>\n${body}\n</svg>\n`;
 }
+// finds a spot for an engraved ID that stays clear of every tunnel notch
+export function labelX(w,notches,tunnelW,id){
+  const hw=id.length*0.9+1;
+  for(let d=0;d<=w/2;d+=1)for(const x of [w/2-d,w/2+d]){
+    if(x<hw||x>w-hw)continue;
+    if(notches.every(n=>Math.abs(n-x)>=tunnelW/2+hw))return x;
+  }
+  return null;
+}
+
 export function exporters(G,L,P,geo){
   const k2=P.kerf/2, cut=`fill="none" stroke="${P.cutColor}" stroke-width="0.01"`;
   const cutPoly=(pts,d,tx=0,ty=0)=>`<path d="${polyD(offsetPoly(pts,d).map(q=>[q[0]+tx,q[1]+ty]))}" ${cut}/>`;
@@ -50,11 +61,8 @@ export function exporters(G,L,P,geo){
       b.push(cutPoly(stripOutline(pc,G,P),k2,x,ty));
       for(const [a0,a1] of pc.windows)b.push(cutPoly(rectPts(a0,2,a1,G.depth-2),-k2,x,ty));
       if(P.engraveIds&&pc.kind==='wall'&&it.w>=14){
-        const label=pc.id;
-        let lx=x+it.w/2;
-        const nl=pc.notches.map(n=>n-pc.s);
-        if(nl.some(n=>Math.abs(n-it.w/2)<G.tunnelW/2+6))lx=x+Math.min(it.w-8,Math.max(8,it.w/4));
-        b.push(txt(lx,ty+Math.min(3,G.depth/4),label,Math.min(2.6,G.depth/4)));
+        const lx=labelX(it.w,pc.notches.map(n=>n-pc.s),G.tunnelW,pc.id);
+        if(lx!==null)b.push(txt(x+lx,ty+G.depth/2,pc.id,Math.min(2.6,G.depth/4)));
       }
     }
     files.push({name:`strips-sheet-${i+1}.svg`,data:svgDoc(P.stockW,P.stockH,b.join('\n'),`Wall strips, sheet ${i+1} of ${sheets.length}`)});

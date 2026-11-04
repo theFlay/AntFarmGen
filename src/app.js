@@ -57,12 +57,13 @@ const TOOLHELP={
   cell:'Tap a chamber to switch it on or off. Off chambers are sealed and their tunnels close.',
   merge:'Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it.'
 };
-function snapshot(){history.push(JSON.stringify(L));if(history.length>60)history.shift();}
-function regenerate(){if(L)snapshot();G=derive(P);L=generate(G,P);}
+function snapshot(p=P){history.push(JSON.stringify({L,P:p}));if(history.length>60)history.shift();}
+function regenerate(prev=P){if(L)snapshot(prev);G=derive(P);L=generate(G,P);}
 function onParamChange(k){
+  const prev=P;
   P=readParams();
   const g=derive(P);
-  if(GEN_KEYS.has(k)||!L||g.cols!==L.cols||g.rows!==L.rows){regenerate();}
+  if(GEN_KEYS.has(k)||!L||g.cols!==L.cols||g.rows!==L.rows){regenerate(prev);}
   render();
 }
 function render(){
@@ -159,7 +160,8 @@ function init(){
   document.querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>{
     tool=b.dataset.tool;document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x===b));render();
   }));
-  document.getElementById('undo').addEventListener('click',()=>{if(!history.length){setStatus('Nothing to undo.');return;}L=JSON.parse(history.pop());render();});
+  document.getElementById('undo').addEventListener('click',()=>{if(!history.length){setStatus('Nothing to undo.');return;}const h=JSON.parse(history.pop());
+    L=h.L;P=h.P;for(const f of ALL_FIELDS)setField(f,P[f.k]);render();});
   document.getElementById('regen').addEventListener('click',()=>{P=readParams();regenerate();render();});
   document.getElementById('reseed').addEventListener('click',()=>{
     const f=ALL_FIELDS.find(x=>x.k==='seed');setField(f,Math.floor(Math.random()*100000));P=readParams();regenerate();render();
@@ -185,8 +187,12 @@ function init(){
     try{
       const j=JSON.parse(await file.text());
       if(!j.layout||!j.params)throw new Error('not a layout file');
+      const l=j.layout,g=derive(Object.assign({},P,j.params));
+      if(!Array.isArray(l.H)||!Array.isArray(l.V)||!Array.isArray(l.active)||!Array.isArray(l.merges))throw new Error('layout data is incomplete');
+      if(l.cols!==g.cols||l.rows!==g.rows)throw new Error(`layout is ${l.cols} x ${l.rows} but these settings give ${g.cols} x ${g.rows}`);
+      snapshot();
       for(const f of ALL_FIELDS)if(f.k in j.params)setField(f,j.params[f.k]);
-      P=readParams();snapshot();L=j.layout;render();setStatus('Loaded '+file.name+'.');
+      P=readParams();L=l;render();setStatus('Loaded '+file.name+'.');
     }catch(e){setStatus('Could not load: '+e.message);}
     fi.value='';
   });

@@ -78,8 +78,7 @@ export function generate(G,P){
     for(const e of interiorEdges(L,ch)){
       if(!activeSet.has(e.a)||!activeSet.has(e.b))continue;
       if(getEdge(L,e)!=='solid')continue;
-      const len=e.type==='H'?G.cellW:G.cellH;
-      if(spongeLength(P,G,len)<8)continue;
+      if(spongeLength(P,G)<8)continue;
       let mx,my;
       if(e.type==='H'){mx=(G.xs[e.k]+G.xs[e.k+1])/2;my=G.ys[e.j];}else{mx=G.xs[e.i];my=(G.ys[e.r]+G.ys[e.r+1])/2;}
       const u=(mx-P.B)/G.innerW,v=(my-P.B)/G.innerH;
@@ -113,5 +112,6 @@ export function portCells(G,P){
   }
   return out;
 }
-// pocket length is capped so two pockets meeting at a chamber corner can never touch
-export function spongeLength(P,G,edgeLen){return Math.min(P.spongeLen,edgeLen-P.spongeD-4*G.t-1);}
+// Pocket length is capped so two pockets meeting at a chamber corner can never touch.
+// It uses the shorter cell side so every sponge part is the same size and interchangeable.
+export function spongeLength(P,G){return Math.min(P.spongeLen,Math.min(G.cellW,G.cellH)-P.spongeD-4*G.t-1);}

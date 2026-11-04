@@ -2,6 +2,23 @@ import {f1,rectPts} from './util.js';
 import {stH,stV,chambers,chamberCenter} from './layout.js';
 import {spongeLength} from './generate.js';
 /* ---------------- geometry ---------------- */
+// Tabs go in the solid runs either side of each tunnel notch, leaving room for a door slot.
+export function tabPositions(len,notches,G,P){
+  const m=G.t+1,tl=P.tabL,clear=G.tunnelW/2+3;
+  const ivs=[];let a=m;
+  for(const n of notches.slice().sort((x,y)=>x-y)){ivs.push([a,n-clear]);a=n+clear;}
+  ivs.push([a,len-m]);
+  const out=[];
+  ivs.forEach(([a,b],i)=>{
+    const span=b-a;if(span<tl-1e-9)return;
+    const n=Math.max(1,Math.min(Math.round(span/Math.max(10,P.tabPitch)),Math.floor(span/(tl+4))));
+    if(n>1){for(let q=0;q<n;q++)out.push(a+tl/2+(span-tl)*q/(n-1));return;}
+    const first=i===0,last=i===ivs.length-1;
+    out.push(first&&!last?a+tl/2:last&&!first?b-tl/2:(a+b)/2);
+  });
+  return out;
+}
+
 export function buildGeometry(G,L,P){
   const {t,depth,xs,ys,cols,rows,cellW,cellH,tunnelW,tunnelH}=G;
   const B=P.B,W=P.W,H=P.H,D=P.spongeD;
@@ -33,13 +50,13 @@ export function buildGeometry(G,L,P){
     const pt=orient==='H'?[uc,c]:[c,uc];
     fills.push({x:pt[0],y:pt[1],id});
   }
-  function runPieces(orient,line,c,a,b,s,e,segState,segCenter,cellLen){
+  function runPieces(orient,line,c,a,b,s,e,segState,segCenter){
     let cur={s,notches:[]};
     for(let q=a;q<b;q++){
       const st=segState(q),uc=segCenter(q);
       if(st==='tunnel')cur.notches.push(uc);
       if(st==='sponge'){
-        const Ls=spongeLength(P,G,cellLen);
+        const Ls=spongeLength(P,G);
         if(Ls<8){errors.push(`Sponge on ${orient}${line} does not fit: cells too small for a ${P.spongeLen}mm pocket.`);continue;}
         push(orient,line,c,cur.s,uc-Ls/2-t,cur.notches,'wall');
         addSponge(orient,c,uc,Ls,{orient,line,q});
@@ -55,7 +72,7 @@ export function buildGeometry(G,L,P){
       if(!present(hS(j,k))){k++;continue;}
       const a=k;while(k<cols&&present(hS(j,k)))k++;const b=k;
       const s=a===0?B:xs[a]-t/2, e=b===cols?W-B:xs[b]+t/2;
-      runPieces('H',j,ys[j],a,b,s,e,q=>hS(j,q),q=>(xs[q]+xs[q+1])/2,cellW);
+      runPieces('H',j,ys[j],a,b,s,e,q=>hS(j,q),q=>(xs[q]+xs[q+1])/2);
     }
   }
   // vertical walls butt against horizontal ones
@@ -69,22 +86,16 @@ export function buildGeometry(G,L,P){
       const b=r;
       const s=a===0?B:(covered(a,i)?ys[a]+t/2:ys[a]-t/2);
       const e=b===rows?H-B:(covered(b,i)?ys[b]-t/2:ys[b]+t/2);
-      runPieces('V',i,xs[i],a,b,s,e,q=>vS(q,i),q=>(ys[q]+ys[q+1])/2,cellH);
+      runPieces('V',i,xs[i],a,b,s,e,q=>vS(q,i),q=>(ys[q]+ys[q+1])/2);
     }
   }
   // tabs and slots
   const slotsFront=[],slotsBack=[];
   const cl=P.slotClear;
   for(const pc of pieces){
-    const len=pc.e-pc.s, m=t+1;
-    pc.top=[];pc.bot=[];
-    if(len>=P.tabL+2*m){
-      const n=Math.max(1,Math.round(len/Math.max(10,P.tabPitch)));
-      const span=len-2*m-P.tabL;
-      for(let q=0;q<n;q++)pc.top.push(m+P.tabL/2+(n===1?span/2:span*q/(n-1)));
-      const nl=pc.notches.map(x=>x-pc.s);
-      pc.bot=pc.top.filter(u=>nl.every(cx=>Math.abs(u-cx)>=P.tabL/2+tunnelW/2+1));
-    }
+    const len=pc.e-pc.s;
+    pc.top=tabPositions(len,pc.notches.map(x=>x-pc.s),G,P);
+    pc.bot=pc.top.slice();
     if(pc.kind==='vent'){
       const pitch=P.slotW+2.5, a0=t+1.5, a1=len-(t+1.5);
       for(let u=a0;u+P.slotW<=a1+1e-9;u+=pitch)pc.windows.push([u,u+P.slotW]);
@@ -162,8 +173,9 @@ export function buildGeometry(G,L,P){
   if(tunnelH>=depth-1)errors.push(`Tunnel height ${f1(tunnelH)}mm leaves no bridge above it (depth ${f1(depth)}mm).`);
   if(tunnelW+4>Math.min(cellW,cellH)-t)errors.push(`Tunnels (${f1(tunnelW)}mm) are too wide for ${f1(Math.min(cellW,cellH))}mm cells.`);
   if(Math.min(cellW,cellH)<3*t+P.tabL)warnings.push('Cells are very small for this wall thickness and tab length.');
-  const maxLen=Math.max(P.stockW,P.stockH)-10;
-  for(const pc of pieces)if(pc.e-pc.s>maxLen)errors.push(`${pc.id} is ${f1(pc.e-pc.s)}mm long, longer than the strip stock sheet.`);
+  // strips are never rotated when nested, so only the stock width counts
+  const maxLen=P.stockW-10;
+  for(const pc of pieces)if(pc.e-pc.s>maxLen)errors.push(`${pc.id} is ${f1(pc.e-pc.s)}mm long, too long for ${P.stockW}mm wide stock (strips run along the width).`);
   if(depth+2*P.S+10>Math.min(P.stockW,P.stockH))errors.push('Strip stock sheet is too small for one strip.');
   // overlap self-check
   const eps=1e-6;
