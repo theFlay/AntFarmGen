@@ -1,5 +1,5 @@
 import {fmt} from './util.js';
-import {stH,stV} from './layout.js';
+import {stH,stV,chambers,unitPoly,isActive} from './layout.js';
 import {polyD} from './offset.js';
 /* ---------------- top-down drawing ---------------- */
 export function drawTopdown(G,L,P,geo,rules,opts){
@@ -8,10 +8,8 @@ export function drawTopdown(G,L,P,geo,rules,opts){
   o.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -4 ${fmt(W+8)} ${fmt(H+8)}"${opts.mm?` width="${fmt(W+8)}mm" height="${fmt(H+8)}mm"`:''} font-family="system-ui,Arial,sans-serif">`);
   o.push(`<defs><pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" fill="#8a8a86"/><line x1="0" y1="0" x2="0" y2="4" stroke="#6f6f6b" stroke-width="1.6"/></pattern></defs>`);
   o.push(`<rect x="0" y="0" width="${fmt(W)}" height="${fmt(H)}" fill="#dfe4e5"/>`);
-  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
-    const fill=L.active[r][c]?'#e9d5a6':'url(#hatch)';
-    o.push(`<rect x="${fmt(xs[c])}" y="${fmt(ys[r])}" width="${fmt(xs[c+1]-xs[c])}" height="${fmt(ys[r+1]-ys[r])}" fill="${fill}"/>`);
-  }
+  const units=geo.ch.list.flatMap(c=>c.cells);
+  for(const u of units)o.push(`<path d="${polyD(unitPoly(G,u))}" fill="${isActive(L,u)?'#e9d5a6':'url(#hatch)'}"/>`);
   for(const sp of geo.sponges){
     const D=P.spongeD,L2=sp.Ls/2;
     const r=sp.orient==='H'?[sp.uc-L2,sp.c-D/2,sp.Ls,D]:[sp.c-D/2,sp.uc-L2,D,sp.Ls];
@@ -22,6 +20,7 @@ export function drawTopdown(G,L,P,geo,rules,opts){
   }
   for(const pc of geo.pieces){
     const r=pc.rect;
+    if(pc.orient==='D'){o.push(`<path d="${polyD(pc.poly)}" fill="#7a4fc4"/>`);continue;}
     o.push(`<rect x="${fmt(r.x0)}" y="${fmt(r.y0)}" width="${fmt(r.x1-r.x0)}" height="${fmt(r.y1-r.y0)}" fill="${pc.kind==='wall'?'#5b4fc4':pc.kind==='lip'?'#8f86d8':'#3c6fb0'}"/>`);
   }
   // tunnel openings
@@ -67,18 +66,17 @@ export function drawTopdown(G,L,P,geo,rules,opts){
   }
   if(opts.labels){
     for(const pc of geo.pieces){
-      if(pc.kind!=='wall')continue;
+      if(pc.kind!=='wall'&&pc.kind!=='angle')continue;
       const r=pc.rect,cx=(r.x0+r.x1)/2,cy=(r.y0+r.y1)/2;
-      const rot=pc.orient==='V'?` transform="rotate(-90 ${fmt(cx)} ${fmt(cy)})"`:'';
+      const rot=pc.orient==='D'?` transform="rotate(${fmt(Math.atan2(pc.dir[1],pc.dir[0])*180/Math.PI)} ${fmt(cx)} ${fmt(cy)})"`:pc.orient==='V'?` transform="rotate(-90 ${fmt(cx)} ${fmt(cy)})"`:'';
       o.push(`<text x="${fmt(cx)}" y="${fmt(cy+0.9)}" font-size="2.6" text-anchor="middle" fill="#fff"${rot}>${pc.id}</text>`);
     }
     for(const sp of geo.sponges){const pt=sp.orient==='H'?[sp.uc,sp.c]:[sp.c,sp.uc];o.push(`<text x="${fmt(pt[0])}" y="${fmt(pt[1]+0.9)}" font-size="2.6" text-anchor="middle" fill="#fff">${sp.id}</text>`);}
   }
   if(opts.interactive){
     // hit areas
-    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)
-      o.push(`<rect data-cell="${r},${c}" x="${fmt(xs[c])}" y="${fmt(ys[r])}" width="${fmt(xs[c+1]-xs[c])}" height="${fmt(ys[r+1]-ys[r])}" fill="transparent"/>`);
-    if(opts.tool==='wall'){
+    for(const u of units)o.push(`<path data-cell="${u.slice(0,3).filter(v=>v!==undefined).join(',')}" d="${polyD(unitPoly(G,u))}" fill="transparent"/>`);
+    if(opts.tool==='wall'||opts.tool==='jog'){
       const hw=Math.max(4,t*2);
       for(let j=1;j<rows;j++)for(let k=0;k<cols;k++){if(stH(L,j,k)==='none')continue;
         o.push(`<rect data-edge="H,${j},${k}" x="${fmt(xs[k]+t)}" y="${fmt(ys[j]-hw)}" width="${fmt(xs[k+1]-xs[k]-2*t)}" height="${fmt(2*hw)}" fill="transparent" style="cursor:pointer"/>`);}

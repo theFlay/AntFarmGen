@@ -27,7 +27,7 @@ export function pen(P){
     k2,cutPoly,
     outline:(pts,tx=0,ty=0)=>cutPoly(pts,k2,tx,ty),
     cutout:(pts,tx=0,ty=0)=>cutPoly(pts,-k2,tx,ty),
-    rect:s=>cutPoly(rectPts(s.x0,s.y0,s.x1,s.y1),-k2),
+    rect:s=>cutPoly(s.poly||rectPts(s.x0,s.y0,s.x1,s.y1),-k2),
     hole:(x,y,dia)=>`<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(Math.max(0.05,dia/2-k2))}" ${cut}/>`,
     txt:(x,y,s,size,rot)=>`<text x="${fmt(x)}" y="${fmt(y)}" font-size="${fmt(size)}" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" fill="${P.engraveColor}" stroke="none"${rot?` transform="rotate(${rot} ${fmt(x)} ${fmt(y)})"`:''}>${s}</text>`,
   };
@@ -84,7 +84,7 @@ export function exporters(G,L,P,geo){
   const items=geo.pieces.map(pc=>({w:pc.e-pc.s,h:G.depth+2*P.S,draw(x,y){
     const ty=y+P.S,o=[d.outline(stripOutline(pc,G,P),x,ty)];
     for(const [a0,a1] of pc.windows)o.push(d.cutout(rectPts(a0,2,a1,G.depth-2),x,ty));
-    if(P.engraveIds&&pc.kind==='wall'&&this.w>=14){
+    if(P.engraveIds&&(pc.kind==='wall'||pc.kind==='angle')&&this.w>=14){
       const lx=labelX(this.w,pc.notches.map(n=>n-pc.s),G.tunnelW,pc.id);
       if(lx!==null)o.push(d.txt(x+lx,ty+G.depth/2,pc.id,Math.min(2.6,G.depth/4)));
     }

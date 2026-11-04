@@ -24,6 +24,10 @@ export function offsetPoly(pts,d){
     const a=p[i],b=p[(i+1)%p.length];let dx=b[0]-a[0],dy=b[1]-a[1];const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
     nrm.push([sgn*dy,-sgn*dx]);
   }
-  return p.map((q,i)=>{const n0=nrm[(i-1+p.length)%p.length],n1=nrm[i];return [q[0]+d*(n0[0]+n1[0]),q[1]+d*(n0[1]+n1[1])];});
+  // miter join, exact for any corner angle
+  return p.map((q,i)=>{
+    const n0=nrm[(i-1+p.length)%p.length],n1=nrm[i],k=d/(1+n0[0]*n1[0]+n0[1]*n1[1]);
+    return [q[0]+k*(n0[0]+n1[0]),q[1]+k*(n0[1]+n1[1])];
+  });
 }
 export const polyD=pts=>'M'+pts.map(q=>fmt(q[0])+' '+fmt(q[1])).join(' L')+' Z';

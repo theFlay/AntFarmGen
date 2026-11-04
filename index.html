@@ -53,6 +53,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
         <button data-tool="cell">Starting area</button>
         <button data-tool="merge">Brood 2x2</button>
         <button data-tool="join">Join cells</button>
+        <button data-tool="diag">Diagonal</button>
+        <button data-tool="jog">Jog</button>
         <button id="undo">Undo</button>
         <span style="flex:1"></span>
         <button id="reseed">New seed</button>
@@ -65,6 +67,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
         <span><i class="sw" style="background:#8a8a86"></i>Behind closed doors</span>
         <span><i class="sw" style="background:#e8933a"></i>Closed door</span>
         <span><i class="sw" style="background:#5b4fc4"></i>Wall strip</span>
+        <span><i class="sw" style="background:#7a4fc4"></i>Angled strip</span>
         <span><i class="sw" style="background:#2fb37a"></i>Tunnel</span>
         <span><i class="sw" style="background:#4a90d9"></i>Sponge pocket</span>
         <span><i class="sw" style="background:#b9c3c6"></i>Frame</span>
@@ -150,6 +153,12 @@ button:disabled{opacity:.45;cursor:not-allowed}
       { k: "sponges", l: "Sponges", d: 3, step: 1 },
       { k: "dampSide", l: "Damp side", d: "left", opts: [["left", "Left"], ["right", "Right"], ["top", "Top"], ["bottom", "Bottom"], ["none", "None (spread)"]] }
     ]],
+    ["Angled shapes (need glue)", false, [
+      { k: "angled", l: "Use angled shapes", d: false, bool: true, h: "Off keeps the nest a pure jigsaw. On adds diagonal walls and jogs, whose joints must be sealed with acrylic cement and sand." },
+      { k: "diagShare", l: "Diagonal cells (0 to 1)", d: 0.15, step: 0.05 },
+      { k: "jogShare", l: "Jogged walls (0 to 1)", d: 0.6, step: 0.05, h: "Share of solid walls. Walls with tunnels or sponges stay straight." },
+      { k: "jogSize", l: "Jog size (mm)", d: 8, step: 0.5, h: "Under 8mm the angled strip has no room for a tab. Under 6mm there are no jogs." }
+    ]],
     ["Export", false, [
       { k: "stockW", l: "Wall sheet stock width (mm)", d: 600 },
       { k: "stockH", l: "Wall sheet stock height (mm)", d: 400 },
@@ -158,7 +167,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       { k: "engraveIds", l: "Engrave part IDs", d: true, bool: true }
     ]]
   ];
-  var GEN_KEYS = /* @__PURE__ */ new Set(["seed", "brood", "oddShare", "oddMax", "activeCount", "growFrom", "loops", "sponges", "dampSide"]);
+  var GEN_KEYS = /* @__PURE__ */ new Set(["seed", "brood", "oddShare", "oddMax", "angled", "diagShare", "jogShare", "jogSize", "activeCount", "growFrom", "loops", "sponges", "dampSide"]);
   var ALL_FIELDS = PARAMS.flatMap((g) => g[2]);
 
   // src/util.js
@@ -179,6 +188,25 @@ button:disabled{opacity:.45;cursor:not-allowed}
       [a[i], a[j]] = [a[j], a[i]];
     }
     return a;
+  }
+  function polysOverlap(a, b, tol = 1e-3) {
+    for (const poly of [a, b]) for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length];
+      const nx = q[1] - p[1], ny = p[0] - q[0], l = Math.hypot(nx, ny) || 1;
+      let a0 = 1e18, a1 = -1e18, b0 = 1e18, b1 = -1e18;
+      for (const v of a) {
+        const d = (v[0] * nx + v[1] * ny) / l;
+        a0 = Math.min(a0, d);
+        a1 = Math.max(a1, d);
+      }
+      for (const v of b) {
+        const d = (v[0] * nx + v[1] * ny) / l;
+        b0 = Math.min(b0, d);
+        b1 = Math.max(b1, d);
+      }
+      if (Math.min(a1, b1) - Math.max(a0, b0) <= tol) return false;
+    }
+    return true;
   }
   var rectPts = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 
@@ -225,21 +253,55 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
   // src/layout.js
   function emptyLayout(cols, rows) {
-    const L2 = { cols, rows, active: [], merges: [], H: [], V: [] };
-    for (let r = 0; r < rows; r++) L2.active.push(new Array(cols).fill(true));
-    for (let j = 0; j <= rows; j++) L2.H.push(new Array(cols).fill("solid"));
-    for (let r = 0; r < rows; r++) L2.V.push(new Array(cols + 1).fill("solid"));
+    const L2 = { cols, rows, active: [], activeB: [], merges: [], H: [], V: [], diag: [], jogH: [], jogV: [] };
+    for (let r = 0; r < rows; r++) {
+      L2.active.push(new Array(cols).fill(true));
+      L2.activeB.push(new Array(cols).fill(true));
+      L2.diag.push(new Array(cols).fill(0));
+    }
+    for (let j = 0; j <= rows; j++) {
+      L2.H.push(new Array(cols).fill("solid"));
+      L2.jogH.push(new Array(cols).fill(0));
+    }
+    for (let r = 0; r < rows; r++) {
+      L2.V.push(new Array(cols + 1).fill("solid"));
+      L2.jogV.push(new Array(cols + 1).fill(0));
+    }
     return L2;
   }
-  var inGroup = (m, r, c) => m.cells.some(([a, b]) => a === r && b === c);
+  var sameUnit = (x, u) => x[0] === u[0] && x[1] === u[1] && x[2] === u[2];
+  var inGroup = (m, u) => m.cells.some((x) => sameUnit(x, u));
   var broodCells = (r, c) => [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
-  var mergeOf = (L2, r, c) => L2.merges.findIndex((m) => inGroup(m, r, c));
+  var mergeOf = (L2, r, c, h) => L2.merges.findIndex((m) => inGroup(m, [r, c, h]));
+  function unitAt(L2, r, c, side) {
+    const d = L2.diag[r][c];
+    if (!d) return [r, c];
+    const h = side === "top" ? "a" : side === "bottom" ? "b" : side === "left" === (d === 1) ? "a" : "b";
+    return [r, c, h];
+  }
+  var isActive = (L2, [r, c, h]) => h === "b" ? L2.activeB[r][c] : L2.active[r][c];
+  function setActive(L2, [r, c, h], on) {
+    if (h === "b") L2.activeB[r][c] = on;
+    else {
+      L2.active[r][c] = on;
+      if (!h) L2.activeB[r][c] = on;
+    }
+  }
   function normalizeLayout(L2) {
     L2.merges = L2.merges.map((m) => m.cells ? m : { cells: broodCells(m.r, m.c), brood: true });
+    const fresh = emptyLayout(L2.cols, L2.rows);
+    for (const k of ["diag", "jogH", "jogV"]) if (!L2[k]) L2[k] = fresh[k];
+    if (!L2.activeB) L2.activeB = L2.active.map((row) => row.slice());
     return L2;
   }
-  var hMerged = (L2, j, k) => L2.merges.some((m) => inGroup(m, j - 1, k) && inGroup(m, j, k));
-  var vMerged = (L2, r, i) => L2.merges.some((m) => inGroup(m, r, i - 1) && inGroup(m, r, i));
+  var hMerged = (L2, j, k) => {
+    const a = unitAt(L2, j - 1, k, "bottom"), b = unitAt(L2, j, k, "top");
+    return L2.merges.some((m) => inGroup(m, a) && inGroup(m, b));
+  };
+  var vMerged = (L2, r, i) => {
+    const a = unitAt(L2, r, i - 1, "right"), b = unitAt(L2, r, i, "left");
+    return L2.merges.some((m) => inGroup(m, a) && inGroup(m, b));
+  };
   var stH = (L2, j, k) => hMerged(L2, j, k) ? "none" : L2.H[j][k];
   var stV = (L2, r, i) => vMerged(L2, r, i) ? "none" : L2.V[r][i];
   var getEdge = (L2, e) => e.type === "H" ? stH(L2, e.j, e.k) : stV(L2, e.r, e.i);
@@ -248,35 +310,50 @@ button:disabled{opacity:.45;cursor:not-allowed}
     else L2.V[e.r][e.i] = s;
   }
   function chambers(L2) {
-    const id = [];
+    const id = [], idB = [];
     let n = 0;
     const list = [];
     for (let r = 0; r < L2.rows; r++) {
-      id.push([]);
-      for (let c = 0; c < L2.cols; c++) id[r].push(-1);
+      id.push(new Array(L2.cols).fill(-1));
+      idB.push(new Array(L2.cols).fill(-1));
     }
+    const mark = ([r, c, h], v) => {
+      if (h === "b") idB[r][c] = v;
+      else id[r][c] = v;
+    };
+    const tag = (u) => u[2] ? [u[0], u[1], u[2], L2.diag[u[0]][u[1]]] : [u[0], u[1]];
     L2.merges.forEach((m) => {
-      const ch = { id: n, cells: m.cells.map((c) => c.slice()), merged: true, brood: !!m.brood };
-      for (const [r, c] of ch.cells) id[r][c] = n;
+      const ch = { id: n, cells: m.cells.map(tag), merged: true, brood: !!m.brood };
+      for (const u of m.cells) mark(u, n);
       list.push(ch);
       n++;
     });
-    for (let r = 0; r < L2.rows; r++) for (let c = 0; c < L2.cols; c++) if (id[r][c] < 0) {
-      id[r][c] = n;
-      list.push({ id: n, cells: [[r, c]], merged: false });
-      n++;
+    for (let r = 0; r < L2.rows; r++) for (let c = 0; c < L2.cols; c++) {
+      for (const u of L2.diag[r][c] ? [[r, c, "a"], [r, c, "b"]] : [[r, c]]) {
+        const cur = u[2] === "b" ? idB[r][c] : id[r][c];
+        if (cur < 0) {
+          mark(u, n);
+          list.push({ id: n, cells: [tag(u)], merged: false });
+          n++;
+        }
+      }
     }
-    for (const ch of list) ch.active = ch.cells.every(([r, c]) => L2.active[r][c]);
-    return { id, list };
+    for (const ch of list) ch.active = ch.cells.every((u) => isActive(L2, u));
+    const at = (r, c, side) => {
+      const u = unitAt(L2, r, c, side);
+      return u[2] === "b" ? idB[r][c] : id[r][c];
+    };
+    const of = (r, c, h) => h === "b" ? idB[r][c] : id[r][c];
+    return { id, idB, at, of, list };
   }
   function interiorEdges(L2, ch) {
     const out = [];
     for (let j = 1; j < L2.rows; j++) for (let k = 0; k < L2.cols; k++) {
-      const a = ch.id[j - 1][k], b = ch.id[j][k];
+      const a = ch.at(j - 1, k, "bottom"), b = ch.at(j, k, "top");
       if (a !== b) out.push({ type: "H", j, k, a, b });
     }
     for (let r = 0; r < L2.rows; r++) for (let i = 1; i < L2.cols; i++) {
-      const a = ch.id[r][i - 1], b = ch.id[r][i];
+      const a = ch.at(r, i - 1, "right"), b = ch.at(r, i, "left");
       if (a !== b) out.push({ type: "V", r, i, a, b });
     }
     return out;
@@ -292,13 +369,62 @@ button:disabled{opacity:.45;cursor:not-allowed}
     }
     return adj;
   }
+  function unitPoly(G2, [r, c, h, d]) {
+    const x0 = G2.xs[c], x1 = G2.xs[c + 1], y0 = G2.ys[r], y1 = G2.ys[r + 1];
+    const TL = [x0, y0], TR = [x1, y0], BR = [x1, y1], BL = [x0, y1];
+    if (!h) return [TL, TR, BR, BL];
+    if (d === 1) return h === "a" ? [TL, TR, BL] : [TR, BR, BL];
+    return h === "a" ? [TL, TR, BR] : [TL, BR, BL];
+  }
+  function unitCenter(G2, u) {
+    const p = unitPoly(G2, u);
+    return [p.reduce((a, q) => a + q[0], 0) / p.length, p.reduce((a, q) => a + q[1], 0) / p.length];
+  }
   function chamberCenter(G2, ch) {
     let sx = 0, sy = 0;
-    for (const [r, c] of ch.cells) {
-      sx += (G2.xs[c] + G2.xs[c + 1]) / 2;
-      sy += (G2.ys[r] + G2.ys[r + 1]) / 2;
+    for (const u of ch.cells) {
+      const [x, y] = unitCenter(G2, u);
+      sx += x;
+      sy += y;
     }
     return [sx / ch.cells.length, sy / ch.cells.length];
+  }
+  var SIDE_STEP = { top: [-1, 0], bottom: [1, 0], left: [0, -1], right: [0, 1] };
+  var halfSides = (d) => d === 1 ? { a: ["top", "left"], b: ["bottom", "right"] } : { a: ["top", "right"], b: ["bottom", "left"] };
+  function wallAtCorner(L2, j, i) {
+    if (j === 0 || j === L2.rows || i === 0 || i === L2.cols) return true;
+    return stH(L2, j, i - 1) !== "none" || stH(L2, j, i) !== "none" || stV(L2, j - 1, i) !== "none" || stV(L2, j, i) !== "none";
+  }
+  function addDiagonal(L2, r, c, d, rnd = Math.random) {
+    if (L2.diag[r][c] || mergeOf(L2, r, c) >= 0) return false;
+    const options = (h) => halfSides(d)[h].map((side) => {
+      const [dr, dc] = SIDE_STEP[side], y = r + dr, x = c + dc;
+      if (y < 0 || x < 0 || y >= L2.rows || x >= L2.cols || L2.diag[y][x]) return null;
+      const g = mergeOf(L2, y, x);
+      if (g >= 0 && L2.merges[g].brood) return null;
+      return { cell: [y, x], g, key: g >= 0 ? "g" + g : `c${y},${x}` };
+    }).filter(Boolean);
+    const A = options("a"), Bs = options("b");
+    const pairs = [];
+    for (const a2 of A) for (const b2 of Bs) if (a2.key !== b2.key) pairs.push([a2, b2]);
+    if (!pairs.length) return false;
+    const [a, b] = pairs[Math.floor(rnd() * pairs.length)];
+    const before = JSON.stringify(L2.merges);
+    L2.diag[r][c] = d;
+    for (const [o, h] of [[a, "a"], [b, "b"]]) {
+      if (o.g >= 0) L2.merges[o.g].cells.push([r, c, h]);
+      else L2.merges.push({ cells: [o.cell, [r, c, h]], brood: false });
+    }
+    const ends = d === 1 ? [[r + 1, c], [r, c + 1]] : [[r, c], [r + 1, c + 1]];
+    if (ends.every(([j, i]) => wallAtCorner(L2, j, i))) return true;
+    L2.diag[r][c] = 0;
+    L2.merges = JSON.parse(before);
+    return false;
+  }
+  function removeDiagonal(L2, r, c) {
+    L2.diag[r][c] = 0;
+    for (const m of L2.merges) m.cells = m.cells.filter((u) => !(u[0] === r && u[1] === c && u[2]));
+    L2.merges = L2.merges.filter((m) => m.cells.length > 1);
   }
 
   // src/generate.js
@@ -316,11 +442,44 @@ button:disabled{opacity:.45;cursor:not-allowed}
       }
     }
     growOddChambers(G2, P2, L2, rnd);
-    const ch = chambers(L2), adj = adjacency(L2, ch);
-    const ids = ch.list.map((c) => c.id);
+    if (P2.angled) growDiagonals(G2, P2, L2, rnd);
+    let ch, adj, ids, deg, done;
+    for (; ; ) {
+      ch = chambers(L2);
+      adj = adjacency(L2, ch);
+      ids = ch.list.map((c) => c.id);
+      done = buildTree(G2, L2, ids, adj, pick);
+      const split = [];
+      for (let r = 0; r < G2.rows; r++) for (let c = 0; c < G2.cols; c++) if (L2.diag[r][c]) split.push([r, c]);
+      if (done.ok || !split.length) break;
+      removeDiagonal(L2, ...pick(split));
+    }
+    deg = done.deg;
+    const extra = Math.round(Math.max(0, P2.loops || 0) * ids.length);
+    const pairs = [];
+    for (const a of ids) for (const [b, es] of adj.get(a)) if (a < b) pairs.push([a, b, es]);
+    shuffle(pairs, rnd);
+    let added = 0;
+    for (const [a, b, es] of pairs) {
+      if (added >= extra) break;
+      if (deg.get(a) >= 3 || deg.get(b) >= 3) continue;
+      if (es.some((e) => getEdge(L2, e) === "tunnel")) continue;
+      setEdge(L2, pick(es), "tunnel");
+      deg.set(a, deg.get(a) + 1);
+      deg.set(b, deg.get(b) + 1);
+      added++;
+    }
+    const start = startArea(G2, P2, L2, ch, rnd, pick);
+    for (const c of ch.list) for (const u of c.cells) setActive(L2, u, start.has(c.id));
+    placeSponges(G2, P2, L2, ch, start, rnd);
+    if (P2.angled) placeJogs(G2, P2, L2, ch, rnd);
+    return L2;
+  }
+  function buildTree(G2, L2, ids, adj, pick) {
+    const relax = !L2.diag.some((row) => row.some(Boolean));
     let deg = /* @__PURE__ */ new Map(), done = false;
     for (let attempt = 0; attempt < 60 && !done; attempt++) {
-      const cap = attempt >= 50 ? 99 : 3;
+      const cap = relax && attempt >= 50 ? 99 : 3;
       for (let j = 0; j <= G2.rows; j++) L2.H[j].fill("solid");
       for (let r = 0; r < G2.rows; r++) L2.V[r].fill("solid");
       deg = new Map(ids.map((i) => [i, 0]));
@@ -340,25 +499,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       }
       if (inT.size === ids.length) done = true;
     }
-    const extra = Math.round(Math.max(0, P2.loops || 0) * ids.length);
-    const pairs = [];
-    for (const a of ids) for (const [b, es] of adj.get(a)) if (a < b) pairs.push([a, b, es]);
-    shuffle(pairs, rnd);
-    let added = 0;
-    for (const [a, b, es] of pairs) {
-      if (added >= extra) break;
-      if (deg.get(a) >= 3 || deg.get(b) >= 3) continue;
-      if (es.some((e) => getEdge(L2, e) === "tunnel")) continue;
-      setEdge(L2, pick(es), "tunnel");
-      deg.set(a, deg.get(a) + 1);
-      deg.set(b, deg.get(b) + 1);
-      added++;
-    }
-    const start = startArea(G2, P2, L2, ch, rnd, pick);
-    for (let r = 0; r < G2.rows; r++) L2.active[r].fill(true);
-    for (const c of ch.list) if (!start.has(c.id)) for (const [r, cc] of c.cells) L2.active[r][cc] = false;
-    placeSponges(G2, P2, L2, ch, start, rnd);
-    return L2;
+    return { ok: done, deg };
   }
   function growOddChambers(G2, P2, L2, rnd) {
     const share = Math.min(1, Math.max(0, P2.oddShare || 0)), maxC = Math.max(2, Math.round(P2.oddMax || 2));
@@ -383,6 +524,52 @@ button:disabled{opacity:.45;cursor:not-allowed}
       if (group.length < 2) continue;
       L2.merges.push({ cells: group, brood: false });
       budget -= group.length;
+    }
+  }
+  function growDiagonals(G2, P2, L2, rnd) {
+    const share = Math.min(1, Math.max(0, P2.diagShare || 0));
+    const cells = [];
+    for (let r = 0; r < G2.rows; r++) for (let c = 0; c < G2.cols; c++) if (mergeOf(L2, r, c) < 0) cells.push([r, c]);
+    shuffle(cells, rnd);
+    let want = Math.round(share * cells.length);
+    for (const [r, c] of cells) {
+      if (want <= 0) break;
+      if (addDiagonal(L2, r, c, rnd() < 0.5 ? 1 : 2, rnd)) want--;
+    }
+  }
+  var edgeCells = (e) => e.type === "H" ? [[e.j - 1, e.k], [e.j, e.k]] : [[e.r, e.i - 1], [e.r, e.i]];
+  function placeJogs(G2, P2, L2, ch, rnd) {
+    const share = Math.min(1, Math.max(0, P2.jogShare || 0));
+    if (share <= 0) return;
+    const edges = interiorEdges(L2, ch);
+    const busy = /* @__PURE__ */ new Set();
+    for (const e of edges) if (getEdge(L2, e) === "sponge") {
+      busy.add(e.a);
+      busy.add(e.b);
+    }
+    const size = Math.min(P2.jogSize, Math.min(G2.cellW, G2.cellH) / 5);
+    if (size < 6) return;
+    const cand = [];
+    for (const e of edges) {
+      if (getEdge(L2, e) !== "solid") continue;
+      if (edgeCells(e).some(([r, c]) => L2.diag[r][c])) continue;
+      if (e.type === "V" && (e.r === 0 || e.r === G2.rows - 1)) continue;
+      cand.push(e);
+    }
+    shuffle(cand, rnd);
+    let want = Math.round(share * cand.length);
+    for (const e of cand) {
+      if (want <= 0) break;
+      if (busy.has(e.a) || busy.has(e.b)) continue;
+      const sign = rnd() < 0.5 ? 1 : -1;
+      if (e.type === "V") {
+        const k = sign > 0 ? e.i : e.i - 1;
+        if (stH(L2, e.r, k) === "none" || stH(L2, e.r + 1, k) === "none") continue;
+        L2.jogV[e.r][e.i] = sign * size;
+      } else L2.jogH[e.j][e.k] = sign * size;
+      busy.add(e.a);
+      busy.add(e.b);
+      want--;
     }
   }
   function tunnelGraph(L2, ch) {
@@ -419,7 +606,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       const [x, y] = chamberCenter(G2, c);
       return (x - tgt[0]) ** 2 + (y - tgt[1]) ** 2;
     };
-    const portCh = new Set(portCells(G2, P2).map((p) => ch.id[p.cell[0]][p.cell[1]]));
+    const portCh = new Set(portCells(G2, P2).map((p) => ch.at(p.cell[0], p.cell[1], p.side)));
     const pool = P2.growFrom !== "center" && portCh.size ? ch.list.filter((c) => portCh.has(c.id)) : ch.list;
     const seed = pool.slice().sort((a, b) => dist(a) - dist(b))[0];
     const set = /* @__PURE__ */ new Set([seed.id]);
@@ -448,6 +635,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
     const cand = [];
     for (const e of interiorEdges(L2, ch)) {
       if (getEdge(L2, e) !== "solid") continue;
+      if (edgeCells(e).some(([r, c]) => L2.diag[r][c])) continue;
       let mx, my;
       if (e.type === "H") {
         mx = (G2.xs[e.k] + G2.xs[e.k + 1]) / 2;
@@ -629,11 +817,22 @@ button:disabled{opacity:.45;cursor:not-allowed}
       const pt = orient === "H" ? [uc, c] : [c, uc];
       fills.push({ x: pt[0], y: pt[1], id });
     }
-    function runPieces(orient, line, c, a, b, s, e, segState, segCenter) {
+    const angles = [];
+    function runPieces(orient, line, c, a, b, s, e, segState, segCenter, jogAt = () => 0) {
       let cur = { s, notches: [] };
       for (let q = a; q < b; q++) {
         const st = segState(q), uc = segCenter(q);
         if (st === "tunnel") cur.notches.push(uc);
+        const off = st === "solid" ? jogAt(q) : 0;
+        if (off) {
+          const flat = cellW * 0.18, m = Math.abs(off), b1 = uc - flat - m, b2 = uc - flat, b3 = uc + flat, b4 = uc + flat + m;
+          const stub = push(orient, line, c, cur.s, b1 + t / 2, cur.notches, "wall");
+          if (stub) stub.adapt = true;
+          const mid = push(orient, line, c + off, b2 - t / 2, b3 + t / 2, [], "wall");
+          if (mid) mid.adapt = true;
+          angles.push([[b1, c], [b2, c + off]], [[b3, c + off], [b4, c]]);
+          cur = { s: b4 - t / 2, notches: [], adapt: true };
+        }
         if (st === "sponge") {
           const Ls = spongeLength(P2, G2);
           if (Ls < 8) {
@@ -645,7 +844,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
           cur = { s: uc + Ls / 2 + t, notches: [] };
         }
       }
-      push(orient, line, c, cur.s, e, cur.notches, "wall");
+      const last = push(orient, line, c, cur.s, e, cur.notches, "wall");
+      if (last && cur.adapt) last.adapt = true;
     }
     for (let j = 1; j < rows; j++) {
       let k = 0;
@@ -658,7 +858,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
         while (k < cols && present(hS(j, k))) k++;
         const b = k;
         const s = a === 0 ? B : xs[a] - t / 2, e = b === cols ? W - B : xs[b] + t / 2;
-        runPieces("H", j, ys[j], a, b, s, e, (q) => hS(j, q), (q) => (xs[q] + xs[q + 1]) / 2);
+        runPieces("H", j, ys[j], a, b, s, e, (q) => hS(j, q), (q) => (xs[q] + xs[q + 1]) / 2, (q) => L2.jogH[j][q]);
       }
     }
     const covered = (j, i) => j >= 1 && j < rows && (present(hS(j, i - 1)) || present(hS(j, i)));
@@ -675,6 +875,19 @@ button:disabled{opacity:.45;cursor:not-allowed}
         const b = r;
         const s = a === 0 ? B : covered(a, i) ? ys[a] + t / 2 : ys[a] - t / 2;
         const e = b === rows ? H - B : covered(b, i) ? ys[b] - t / 2 : ys[b] + t / 2;
+        const off = vS(a, i) === "solid" ? L2.jogV[a][i] : 0;
+        if (off) {
+          const k = off > 0 ? i : i - 1;
+          const ok = b === a + 1 && a >= 1 && b < rows && present(hS(a, k)) && present(hS(b, k));
+          if (ok) {
+            const uc = (ys[a] + ys[b]) / 2, m = Math.abs(off), b1 = uc - m / 2, b2 = uc + m / 2;
+            const top = push("V", i, xs[i], s, b1 + t / 2, [], "wall"), bot = push("V", i, xs[i] + off, b2 - t / 2, e, [], "wall");
+            for (const x of [top, bot]) if (x) x.adapt = true;
+            angles.push([[xs[i], b1], [xs[i] + off, b2]]);
+            continue;
+          }
+          warnings.push(`A jog on wall V${i} was skipped: it needs a solid wall at both ends.`);
+        }
         runPieces("V", i, xs[i], a, b, s, e, (q) => vS(q, i), (q) => (ys[q] + ys[q + 1]) / 2);
       }
     }
@@ -699,11 +912,53 @@ button:disabled{opacity:.45;cursor:not-allowed}
         }
       }
     }
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      if (L2.diag[r][c] === 1) angles.push([[xs[c], ys[r + 1]], [xs[c + 1], ys[r]]]);
+      if (L2.diag[r][c] === 2) angles.push([[xs[c], ys[r]], [xs[c + 1], ys[r + 1]]]);
+    }
+    const footprint = (pc) => pc.poly || (pc.orient === "H" ? rectPts(pc.s, pc.c - t / 2, pc.e, pc.c + t / 2) : rectPts(pc.c - t / 2, pc.s, pc.c + t / 2, pc.e));
+    const obstacles = pieces.map(footprint).concat([rectPts(0, 0, W, B), rectPts(0, H - B, W, H), rectPts(0, 0, B, H), rectPts(W - B, 0, W, H)]);
+    const band = (p, q) => {
+      const dx = q[0] - p[0], dy = q[1] - p[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l * t / 2, ny = dx / l * t / 2;
+      return [[p[0] + nx, p[1] + ny], [q[0] + nx, q[1] + ny], [q[0] - nx, q[1] - ny], [p[0] - nx, p[1] - ny]];
+    };
+    angles.forEach(([p, q], n) => {
+      const full = Math.hypot(q[0] - p[0], q[1] - p[1]), ux = (q[0] - p[0]) / full, uy = (q[1] - p[1]) / full;
+      const at = (from, s) => [from[0] + s * ux, from[1] + s * uy];
+      const trim = (from, sign) => {
+        let s = 0;
+        const hit = (v) => {
+          const a2 = at(from, sign * v), b2 = at(from, sign * (v + 0.5));
+          const f = band(a2, b2);
+          return obstacles.some((o) => polysOverlap(f, o));
+        };
+        if (!hit(0)) {
+          errors.push("A diagonal wall ends in open space, so ants could pass around it.");
+          return 0;
+        }
+        while (s < full / 2 && hit(s)) s += 0.02;
+        return s;
+      };
+      const s0 = trim(p, 1), s1 = trim(q, -1);
+      const a = at(p, s0), b = at(q, -s1), len = full - s0 - s1;
+      if (len < 4) {
+        errors.push("An angled wall is too short to cut.");
+        return;
+      }
+      const pc = { id: "A" + (n + 1), orient: "D", kind: "angle", c: 0, s: 0, e: len, p0: a, dir: [ux, uy], notches: [], windows: [], poly: band(a, b) };
+      pieces.push(pc);
+      obstacles.push(pc.poly);
+    });
     const slotsFront = [], slotsBack = [];
     const cl = P2.slotClear;
     for (const pc of pieces) {
       const len = pc.e - pc.s;
-      pc.top = pc.kind === "lip" ? [pc.tabL / 2] : tabPositions(len, pc.notches.map((x) => x - pc.s), G2, P2);
+      const small = (pc.kind === "angle" || pc.adapt) && len < P2.tabL + 2 * (t + 1);
+      if (small) {
+        const tl = Math.min(P2.tabL, len - 3);
+        if (tl >= 3) pc.tabL = tl;
+        pc.top = tl >= 3 ? [len / 2] : [];
+      } else pc.top = pc.kind === "lip" ? [pc.tabL / 2] : tabPositions(len, pc.notches.map((x) => x - pc.s), G2, P2);
       pc.bot = pc.top.slice();
       if (pc.kind === "vent") {
         const pitch = P2.slotW + 2.5, a0 = t + 1.5, a1 = len - (t + 1.5);
@@ -712,13 +967,20 @@ button:disabled{opacity:.45;cursor:not-allowed}
       const slot = (u) => {
         const g = pc.s + u;
         const tl = (pc.tabL || P2.tabL) / 2;
+        if (pc.orient === "D") {
+          const [x, y] = [pc.p0[0] + pc.dir[0] * u, pc.p0[1] + pc.dir[1] * u], [ux, uy] = pc.dir, a = tl + cl / 2, b = t / 2 + cl / 2;
+          const poly = [[x - ux * a - uy * b, y - uy * a + ux * b], [x + ux * a - uy * b, y + uy * a + ux * b], [x + ux * a + uy * b, y + uy * a - ux * b], [x - ux * a + uy * b, y - uy * a - ux * b]];
+          return { poly, x0: Math.min(...poly.map((v) => v[0])), x1: Math.max(...poly.map((v) => v[0])), y0: Math.min(...poly.map((v) => v[1])), y1: Math.max(...poly.map((v) => v[1])) };
+        }
         return pc.orient === "H" ? { x0: g - tl - cl / 2, x1: g + tl + cl / 2, y0: pc.c - t / 2 - cl / 2, y1: pc.c + t / 2 + cl / 2 } : { x0: pc.c - t / 2 - cl / 2, x1: pc.c + t / 2 + cl / 2, y0: g - tl - cl / 2, y1: g + tl + cl / 2 };
       };
       for (const u of pc.top) slotsFront.push(Object.assign(slot(u), { id: pc.id }));
       for (const u of pc.bot) slotsBack.push(Object.assign(slot(u), { id: pc.id }));
     }
     for (const pc of pieces) {
-      pc.rect = pc.orient === "H" ? { x0: pc.s, x1: pc.e, y0: pc.c - t / 2, y1: pc.c + t / 2 } : { x0: pc.c - t / 2, x1: pc.c + t / 2, y0: pc.s, y1: pc.e };
+      pc.poly = footprint(pc);
+      const X = pc.poly.map((v) => v[0]), Y = pc.poly.map((v) => v[1]);
+      pc.rect = { x0: Math.min(...X), x1: Math.max(...X), y0: Math.min(...Y), y1: Math.max(...Y) };
     }
     const ports = [];
     const w = tunnelW;
@@ -750,8 +1012,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
             }
           }
           p.cell = cell;
-          p.chamber = ch.id[cell[0]][cell[1]];
-          p.active = L2.active[cell[0]][cell[1]];
+          p.chamber = ch.at(cell[0], cell[1], side);
+          p.active = ch.list[p.chamber].active;
           ports.push(p);
         }
       }
@@ -816,7 +1078,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       for (let a = 0; a < vg; a++) for (let b = 0; b < vg; b++) vents.push({ x: cx + (a - (vg - 1) / 2) * vp, y: cy + (b - (vg - 1) / 2) * vp });
     };
     if (vg > 0) for (const c of ch.list) {
-      if (c.merged && !c.brood) for (const [r, cc] of c.cells) ventAt([(xs[cc] + xs[cc + 1]) / 2, (ys[r] + ys[r + 1]) / 2]);
+      if (c.merged && !c.brood) for (const u of c.cells) ventAt(unitCenter(G2, u));
       else ventAt(chamberCenter(G2, c));
     }
     if (depth <= 0) errors.push("Depth must be above 0.");
@@ -833,11 +1095,11 @@ button:disabled{opacity:.45;cursor:not-allowed}
     }
     for (let a = 0; a < pieces.length; a++) for (let b = a + 1; b < pieces.length; b++) {
       const p = pieces[a].rect, q = pieces[b].rect;
-      const ox = Math.min(p.x1, q.x1) - Math.max(p.x0, q.x0), oy = Math.min(p.y1, q.y1) - Math.max(p.y0, q.y0);
-      if (ox > 1e-4 && oy > 1e-4) errors.push(`Geometry: ${pieces[a].id} overlaps ${pieces[b].id}.`);
+      if (Math.min(p.x1, q.x1) - Math.max(p.x0, q.x0) <= 0 || Math.min(p.y1, q.y1) - Math.max(p.y0, q.y0) <= 0) continue;
+      if (polysOverlap(pieces[a].poly, pieces[b].poly)) errors.push(`Geometry: ${pieces[a].id} overlaps ${pieces[b].id}.`);
     }
     const asRect = (x, y, r) => ({ x0: x - r, x1: x + r, y0: y - r, y1: y + r });
-    const front = (G2.service === "front" ? slotsFront : slotsBack).concat(
+    const front = (G2.service === "front" ? slotsFront : slotsBack).filter((s) => !s.poly).concat(
       doorSlots,
       vents.map((v) => asRect(v.x, v.y, P2.ventD / 2)),
       fills.map((f) => asRect(f.x, f.y, P2.fillD / 2))
@@ -957,6 +1219,11 @@ button:disabled{opacity:.45;cursor:not-allowed}
       bad.add(c.id);
     }
     if (sp) msgs.push(["error", `${sp} chamber(s) have more than 2 sponges.`]);
+    const lone = ch.list.filter((c) => c.cells.length === 1 && c.cells[0][2]);
+    if (lone.length) {
+      msgs.push(["error", `${lone.length} chamber(s) are a lone triangle, too small to use.`]);
+      lone.forEach((c) => bad.add(c.id));
+    }
     const brood = ch.list.filter((c) => c.brood);
     if (brood.length && !brood.some((c) => c.active)) msgs.push(["error", "The starting area has no brood chamber."]);
     const wantS = Math.max(0, Math.round(P2.sponges || 0));
@@ -975,6 +1242,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
     const noTabs = geo2.pieces.filter((pc) => pc.notches.length && !pc.top.length).length;
     if (noTabs) msgs.push(["warn", `${noTabs} tunnel strip(s) are too short for tabs. Shorten the tab length or glue them.`]);
     if (geo2.minWeb < 1) msgs.push(["warn", `Two cuts in a sheet are only ${geo2.minWeb.toFixed(2)}mm apart and may crack.`]);
+    const shortA = geo2.pieces.filter((p) => p.kind === "angle" && !p.top.length).length;
+    if (shortA) msgs.push(["warn", `${shortA} angled strip(s) are too short for tabs and rely on glue alone. A larger jog size fixes this.`]);
+    const nAngle = geo2.pieces.filter((p) => p.kind === "angle").length;
+    if (nAngle) msgs.push(["info", `${nAngle} angled strip(s). Their joints leave small wedge gaps: seal them with thickened acrylic cement, then sand, and let it cure fully before ants go in.`]);
     for (const e of geo2.errors) msgs.push(["error", e]);
     for (const w of geo2.warnings) msgs.push(["warn", w]);
     const ok = !msgs.some((m) => m[0] === "error");
@@ -1027,8 +1298,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
       nrm.push([sgn * dy, -sgn * dx]);
     }
     return p.map((q, i) => {
-      const n0 = nrm[(i - 1 + p.length) % p.length], n1 = nrm[i];
-      return [q[0] + d * (n0[0] + n1[0]), q[1] + d * (n0[1] + n1[1])];
+      const n0 = nrm[(i - 1 + p.length) % p.length], n1 = nrm[i], k = d / (1 + n0[0] * n1[0] + n0[1] * n1[1]);
+      return [q[0] + k * (n0[0] + n1[0]), q[1] + k * (n0[1] + n1[1])];
     });
   }
   var polyD = (pts) => "M" + pts.map((q) => fmt(q[0]) + " " + fmt(q[1])).join(" L") + " Z";
@@ -1057,10 +1328,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
     o.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -4 ${fmt(W + 8)} ${fmt(H + 8)}"${opts.mm ? ` width="${fmt(W + 8)}mm" height="${fmt(H + 8)}mm"` : ""} font-family="system-ui,Arial,sans-serif">`);
     o.push(`<defs><pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" fill="#8a8a86"/><line x1="0" y1="0" x2="0" y2="4" stroke="#6f6f6b" stroke-width="1.6"/></pattern></defs>`);
     o.push(`<rect x="0" y="0" width="${fmt(W)}" height="${fmt(H)}" fill="#dfe4e5"/>`);
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-      const fill = L2.active[r][c] ? "#e9d5a6" : "url(#hatch)";
-      o.push(`<rect x="${fmt(xs[c])}" y="${fmt(ys[r])}" width="${fmt(xs[c + 1] - xs[c])}" height="${fmt(ys[r + 1] - ys[r])}" fill="${fill}"/>`);
-    }
+    const units = geo2.ch.list.flatMap((c) => c.cells);
+    for (const u of units) o.push(`<path d="${polyD(unitPoly(G2, u))}" fill="${isActive(L2, u) ? "#e9d5a6" : "url(#hatch)"}"/>`);
     for (const sp of geo2.sponges) {
       const D = P2.spongeD, L22 = sp.Ls / 2;
       const r = sp.orient === "H" ? [sp.uc - L22, sp.c - D / 2, sp.Ls, D] : [sp.c - D / 2, sp.uc - L22, D, sp.Ls];
@@ -1071,6 +1340,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
     }
     for (const pc of geo2.pieces) {
       const r = pc.rect;
+      if (pc.orient === "D") {
+        o.push(`<path d="${polyD(pc.poly)}" fill="#7a4fc4"/>`);
+        continue;
+      }
       o.push(`<rect x="${fmt(r.x0)}" y="${fmt(r.y0)}" width="${fmt(r.x1 - r.x0)}" height="${fmt(r.y1 - r.y0)}" fill="${pc.kind === "wall" ? "#5b4fc4" : pc.kind === "lip" ? "#8f86d8" : "#3c6fb0"}"/>`);
     }
     const tw = G2.tunnelW;
@@ -1136,9 +1409,9 @@ button:disabled{opacity:.45;cursor:not-allowed}
     }
     if (opts.labels) {
       for (const pc of geo2.pieces) {
-        if (pc.kind !== "wall") continue;
+        if (pc.kind !== "wall" && pc.kind !== "angle") continue;
         const r = pc.rect, cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
-        const rot = pc.orient === "V" ? ` transform="rotate(-90 ${fmt(cx)} ${fmt(cy)})"` : "";
+        const rot = pc.orient === "D" ? ` transform="rotate(${fmt(Math.atan2(pc.dir[1], pc.dir[0]) * 180 / Math.PI)} ${fmt(cx)} ${fmt(cy)})"` : pc.orient === "V" ? ` transform="rotate(-90 ${fmt(cx)} ${fmt(cy)})"` : "";
         o.push(`<text x="${fmt(cx)}" y="${fmt(cy + 0.9)}" font-size="2.6" text-anchor="middle" fill="#fff"${rot}>${pc.id}</text>`);
       }
       for (const sp of geo2.sponges) {
@@ -1147,9 +1420,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
       }
     }
     if (opts.interactive) {
-      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
-        o.push(`<rect data-cell="${r},${c}" x="${fmt(xs[c])}" y="${fmt(ys[r])}" width="${fmt(xs[c + 1] - xs[c])}" height="${fmt(ys[r + 1] - ys[r])}" fill="transparent"/>`);
-      if (opts.tool === "wall") {
+      for (const u of units) o.push(`<path data-cell="${u.slice(0, 3).filter((v) => v !== void 0).join(",")}" d="${polyD(unitPoly(G2, u))}" fill="transparent"/>`);
+      if (opts.tool === "wall" || opts.tool === "jog") {
         const hw = Math.max(4, t * 2);
         for (let j = 1; j < rows; j++) for (let k = 0; k < cols; k++) {
           if (stH(L2, j, k) === "none") continue;
@@ -1259,7 +1531,7 @@ ${body}
       cutPoly,
       outline: (pts, tx = 0, ty = 0) => cutPoly(pts, k2, tx, ty),
       cutout: (pts, tx = 0, ty = 0) => cutPoly(pts, -k2, tx, ty),
-      rect: (s) => cutPoly(rectPts(s.x0, s.y0, s.x1, s.y1), -k2),
+      rect: (s) => cutPoly(s.poly || rectPts(s.x0, s.y0, s.x1, s.y1), -k2),
       hole: (x, y, dia) => `<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(Math.max(0.05, dia / 2 - k2))}" ${cut}/>`,
       txt: (x, y, s, size, rot) => `<text x="${fmt(x)}" y="${fmt(y)}" font-size="${fmt(size)}" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" fill="${P2.engraveColor}" stroke="none"${rot ? ` transform="rotate(${rot} ${fmt(x)} ${fmt(y)})"` : ""}>${s}</text>`
     };
@@ -1314,7 +1586,7 @@ ${body}
     const items = geo2.pieces.map((pc) => ({ w: pc.e - pc.s, h: G2.depth + 2 * P2.S, draw(x2, y2) {
       const ty = y2 + P2.S, o = [d.outline(stripOutline(pc, G2, P2), x2, ty)];
       for (const [a0, a1] of pc.windows) o.push(d.cutout(rectPts(a0, 2, a1, G2.depth - 2), x2, ty));
-      if (P2.engraveIds && pc.kind === "wall" && this.w >= 14) {
+      if (P2.engraveIds && (pc.kind === "wall" || pc.kind === "angle") && this.w >= 14) {
         const lx = labelX(this.w, pc.notches.map((n) => n - pc.s), G2.tunnelW, pc.id);
         if (lx !== null) o.push(d.txt(x2 + lx, ty + G2.depth / 2, pc.id, Math.min(2.6, G2.depth / 4)));
       }
@@ -1475,7 +1747,9 @@ ${body}
     wall: "Tap a wall to cycle solid, tunnel, sponge.",
     cell: "Tap a chamber to add it to, or remove it from, the starting area. Everything is still cut; this only sets which doors start closed.",
     merge: "Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it.",
-    join: "Tap a cell, then a touching cell, to join their chambers. Tap the same cell twice to split it."
+    join: "Tap a cell, then a touching cell, to join their chambers. Tap the same cell twice to split it.",
+    diag: "Tap a cell to cycle no diagonal, / and \\. Each half joins a neighbouring chamber. Needs Angled shapes on.",
+    jog: "Tap a solid wall to step it sideways one way, then the other, then back. Needs Angled shapes on."
   };
   function snapshot(p = P) {
     history.push(JSON.stringify({ L, P: p }));
@@ -1550,21 +1824,69 @@ ${body}
       const cur = getEdge(L, e);
       if (cur === "none") return;
       snapshot();
+      if (e.type === "H") L.jogH[e.j][e.k] = 0;
+      else L.jogV[e.r][e.i] = 0;
       setEdge(L, e, { solid: "tunnel", tunnel: "sponge", sponge: "solid" }[cur]);
       render();
       return;
     }
+    if (tool === "jog" && el.dataset.edge) {
+      if (!P.angled) {
+        setStatus("Turn on Angled shapes first.");
+        return;
+      }
+      const [type, a, b] = el.dataset.edge.split(",");
+      const e = type === "H" ? { type, j: +a, k: +b } : { type, r: +a, i: +b };
+      if (getEdge(L, e) !== "solid") {
+        setStatus("Only solid walls can jog.");
+        return;
+      }
+      const m = e.type === "H" ? L.jogH[e.j] : L.jogV[e.r], k = e.type === "H" ? e.k : e.i;
+      const size = Math.min(P.jogSize, Math.min(G.cellW, G.cellH) / 5);
+      if (size < 6) {
+        setStatus("Jogs need at least 6mm, so these cells or this jog size are too small.");
+        return;
+      }
+      snapshot();
+      m[k] = m[k] === 0 ? size : m[k] > 0 ? -size : 0;
+      render();
+      return;
+    }
     if (!el.dataset.cell) return;
-    const [r, c] = el.dataset.cell.split(",").map(Number);
+    const parts = el.dataset.cell.split(","), r = +parts[0], c = +parts[1], half = parts[2];
     if (tool === "cell") {
       snapshot();
-      const ch = chambers(L), id = ch.id[r][c], cham = ch.list[id];
+      const ch = chambers(L), cham = ch.list[ch.of(r, c, half)];
       const on = !cham.active;
-      for (const [rr, cc] of cham.cells) L.active[rr][cc] = on;
+      for (const u of cham.cells) setActive(L, u, on);
+      render();
+      return;
+    }
+    if (tool === "diag") {
+      if (!P.angled) {
+        setStatus("Turn on Angled shapes first.");
+        return;
+      }
+      const was = L.diag[r][c];
+      const saved = JSON.stringify(L);
+      if (was) removeDiagonal(L, r, c);
+      const next = (was + 1) % 3;
+      if (next && !addDiagonal(L, r, c, next) && !addDiagonal(L, r, c, next === 1 ? 2 : 0)) {
+        if (!was) {
+          L = JSON.parse(saved);
+          setStatus("That cell cannot take a diagonal: it needs a free cell, with a whole neighbour for each half.");
+          return;
+        }
+      }
+      history.push(JSON.stringify({ L: JSON.parse(saved), P }));
       render();
       return;
     }
     if (tool === "join") {
+      if (L.diag[r][c]) {
+        setStatus("Cells with a diagonal cannot be joined by hand.");
+        return;
+      }
       if (!joinFrom) {
         joinFrom = [r, c];
         setStatus("Now tap a touching cell, or the same cell to split.");
@@ -1596,11 +1918,15 @@ ${body}
       L.merges = L.merges.filter((m, i) => i !== mergeOf(L, a, b) && i !== mergeOf(L, r, c));
       L.merges.push({ cells: keep, brood: ca.brood || cb.brood });
       const on = ca.active && cb.active;
-      for (const [x, y] of keep) L.active[x][y] = on;
+      for (const u of keep) setActive(L, u, on);
       render();
       return;
     }
     if (tool === "merge") {
+      if (L.diag[r][c]) {
+        setStatus("That cell has a diagonal.");
+        return;
+      }
       const mi = mergeOf(L, r, c);
       snapshot();
       if (mi >= 0) {
@@ -1613,13 +1939,13 @@ ${body}
         return;
       }
       const r0 = Math.min(r, L.rows - 2), c0 = Math.min(c, L.cols - 2);
-      if (broodCells(r0, c0).some(([a, b]) => mergeOf(L, a, b) >= 0)) {
+      if (broodCells(r0, c0).some(([a, b]) => mergeOf(L, a, b) >= 0 || L.diag[a][b])) {
         history.pop();
         setStatus("That would overlap another joined chamber.");
         return;
       }
       L.merges.push({ cells: broodCells(r0, c0), brood: true });
-      for (let dr = 0; dr < 2; dr++) for (let dc = 0; dc < 2; dc++) L.active[r0 + dr][c0 + dc] = true;
+      for (const u of broodCells(r0, c0)) setActive(L, u, true);
       render();
     }
   }

@@ -1,7 +1,7 @@
 import {PARAMS,GEN_KEYS,ALL_FIELDS} from './params.js';
 import {f1} from './util.js';
 import {derive} from './grid.js';
-import {chambers,interiorEdges,getEdge,setEdge,mergeOf,broodCells,normalizeLayout} from './layout.js';
+import {chambers,interiorEdges,getEdge,setEdge,mergeOf,broodCells,normalizeLayout,addDiagonal,removeDiagonal,setActive} from './layout.js';
 import {generate} from './generate.js';
 import {buildGeometry} from './geometry.js';
 import {checkRules} from './rules.js';
@@ -56,7 +56,9 @@ const TOOLHELP={
   wall:'Tap a wall to cycle solid, tunnel, sponge.',
   cell:'Tap a chamber to add it to, or remove it from, the starting area. Everything is still cut; this only sets which doors start closed.',
   merge:'Tap a cell to make it the top-left of a 2x2 brood chamber. Tap a brood chamber to split it.',
-  join:'Tap a cell, then a touching cell, to join their chambers. Tap the same cell twice to split it.'
+  join:'Tap a cell, then a touching cell, to join their chambers. Tap the same cell twice to split it.',
+  diag:'Tap a cell to cycle no diagonal, / and \\. Each half joins a neighbouring chamber. Needs Angled shapes on.',
+  jog:'Tap a solid wall to step it sideways one way, then the other, then back. Needs Angled shapes on.'
 };
 function snapshot(p=P){history.push(JSON.stringify({L,P:p}));if(history.length>60)history.shift();}
 function regenerate(prev=P){if(L)snapshot(prev);G=derive(P);L=generate(G,P);}
@@ -107,18 +109,40 @@ function onPreviewClick(ev){
     const [type,a,b]=el.dataset.edge.split(',');
     const e=type==='H'?{type,j:+a,k:+b}:{type,r:+a,i:+b};
     const cur=getEdge(L,e);if(cur==='none')return;
-    snapshot();setEdge(L,e,{solid:'tunnel',tunnel:'sponge',sponge:'solid'}[cur]);render();return;
+    snapshot();if(e.type==='H')L.jogH[e.j][e.k]=0;else L.jogV[e.r][e.i]=0;setEdge(L,e,{solid:'tunnel',tunnel:'sponge',sponge:'solid'}[cur]);render();return;
+  }
+  if(tool==='jog'&&el.dataset.edge){
+    if(!P.angled){setStatus('Turn on Angled shapes first.');return;}
+    const [type,a,b]=el.dataset.edge.split(',');
+    const e=type==='H'?{type,j:+a,k:+b}:{type,r:+a,i:+b};
+    if(getEdge(L,e)!=='solid'){setStatus('Only solid walls can jog.');return;}
+    const m=e.type==='H'?L.jogH[e.j]:L.jogV[e.r],k=e.type==='H'?e.k:e.i;
+    const size=Math.min(P.jogSize,Math.min(G.cellW,G.cellH)/5);
+    if(size<6){setStatus('Jogs need at least 6mm, so these cells or this jog size are too small.');return;}
+    snapshot();m[k]=m[k]===0?size:m[k]>0?-size:0;render();return;
   }
   if(!el.dataset.cell)return;
-  const [r,c]=el.dataset.cell.split(',').map(Number);
+  const parts=el.dataset.cell.split(','),r=+parts[0],c=+parts[1],half=parts[2];
   if(tool==='cell'){
     snapshot();
-    const ch=chambers(L),id=ch.id[r][c],cham=ch.list[id];
+    const ch=chambers(L),cham=ch.list[ch.of(r,c,half)];
     const on=!cham.active;
-    for(const [rr,cc] of cham.cells)L.active[rr][cc]=on;
+    for(const u of cham.cells)setActive(L,u,on);
     render();return;
   }
+  if(tool==='diag'){
+    if(!P.angled){setStatus('Turn on Angled shapes first.');return;}
+    const was=L.diag[r][c];
+    const saved=JSON.stringify(L);
+    if(was)removeDiagonal(L,r,c);
+    const next=(was+1)%3;
+    if(next&&!addDiagonal(L,r,c,next)&&!addDiagonal(L,r,c,next===1?2:0)){
+      if(!was){L=JSON.parse(saved);setStatus('That cell cannot take a diagonal: it needs a free cell, with a whole neighbour for each half.');return;}
+    }
+    history.push(JSON.stringify({L:JSON.parse(saved),P}));render();return;
+  }
   if(tool==='join'){
+    if(L.diag[r][c]){setStatus('Cells with a diagonal cannot be joined by hand.');return;}
     if(!joinFrom){joinFrom=[r,c];setStatus('Now tap a touching cell, or the same cell to split.');return;}
     const [a,b]=joinFrom;joinFrom=null;
     if(a===r&&b===c){
@@ -134,18 +158,19 @@ function onPreviewClick(ev){
     const keep=[...ca.cells,...cb.cells];
     L.merges=L.merges.filter((m,i)=>i!==mergeOf(L,a,b)&&i!==mergeOf(L,r,c));
     L.merges.push({cells:keep,brood:ca.brood||cb.brood});
-    const on=ca.active&&cb.active;for(const [x,y] of keep)L.active[x][y]=on;
+    const on=ca.active&&cb.active;for(const u of keep)setActive(L,u,on);
     render();return;
   }
   if(tool==='merge'){
+    if(L.diag[r][c]){setStatus('That cell has a diagonal.');return;}
     const mi=mergeOf(L,r,c);
     snapshot();
     if(mi>=0){L.merges.splice(mi,1);render();return;}
     if(L.cols<2||L.rows<2){history.pop();return;}
     const r0=Math.min(r,L.rows-2),c0=Math.min(c,L.cols-2);
-    if(broodCells(r0,c0).some(([a,b])=>mergeOf(L,a,b)>=0)){history.pop();setStatus('That would overlap another joined chamber.');return;}
+    if(broodCells(r0,c0).some(([a,b])=>mergeOf(L,a,b)>=0||L.diag[a][b])){history.pop();setStatus('That would overlap another joined chamber.');return;}
     L.merges.push({cells:broodCells(r0,c0),brood:true});
-    for(let dr=0;dr<2;dr++)for(let dc=0;dc<2;dc++)L.active[r0+dr][c0+dc]=true;
+    for(const u of broodCells(r0,c0))setActive(L,u,true);
     render();
   }
 }

@@ -19,9 +19,9 @@ Edit the code in `src/`, then run `npm run build` to rebuild `index.html`. Do no
 |---|---|
 | `src/params.js` | The settings form |
 | `src/grid.js` | Grid from panel and ant sizes |
-| `src/layout.js` | Wall states, joined cells, chambers |
+| `src/layout.js` | Wall states, joined cells, diagonals, chambers |
 | `src/generate.js` | Seeded auto layout, starting area, sponges |
-| `src/geometry.js` | Strips, tabs, doors, ports, frame, fasteners, sockets |
+| `src/geometry.js` | Strips, angled strips, tabs, doors, ports, frame, fasteners, sockets |
 | `src/doors.js` | Door types. Add a new type here |
 | `src/hardware.js` | Pegs, keys, plugs, cover legs, feet |
 | `src/rules.js` | Layout rules that gate export |

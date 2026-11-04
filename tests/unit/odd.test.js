@@ -57,6 +57,7 @@ test('vents never land on a wall in an odd chamber',()=>{
   }
 });
 test('v1 layouts convert to cell groups',()=>{
-  const L=normalizeLayout({merges:[{r:1,c:2}]});
+  const L=normalizeLayout({cols:4,rows:3,active:[[true],[true],[true]],merges:[{r:1,c:2}]});
   assert.deepEqual(L.merges[0],{cells:[[1,2],[1,3],[2,2],[2,3]],brood:true});
+  assert.equal(L.diag.length,3);assert.equal(L.activeB.length,3);
 });

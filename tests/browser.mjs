@@ -55,6 +55,27 @@ await check('join tool joins two cells and splits them again',async p=>{
   await clickSvg(p,`[data-cell="${r},${c}"]`);
   assert.equal(await p.evaluate(()=>window.__nest.state.L.merges.length),n);
 });
+await check('diagonal and jog tools need the toggle, then work, and undo restores them',async p=>{
+  await p.click('[data-tool="diag"]');
+  const [r,c]=await p.evaluate(()=>{const s=window.__nest.state,L=s.L;
+    for(let r=1;r<L.rows-1;r++)for(let c=1;c<L.cols-1;c++)if(!L.merges.some(m=>m.cells.some(u=>u[0]===r&&u[1]===c)))return [r,c];});
+  await clickSvg(p,`[data-cell="${r},${c}"]`);
+  assert.equal(await p.evaluate(([r,c])=>window.__nest.state.L.diag[r][c],[r,c]),0);
+  await p.$eval('#p_angled',e=>{e.checked=true;e.dispatchEvent(new Event('change'));});
+  const cell=await p.evaluate(()=>{const L=window.__nest.state.L;
+    for(let r=1;r<L.rows-1;r++)for(let c=1;c<L.cols-1;c++)if(!L.diag[r][c]&&!L.merges.some(m=>m.cells.some(u=>u[0]===r&&u[1]===c))&&!L.diag[r-1][c]&&!L.diag[r+1][c]&&!L.diag[r][c-1]&&!L.diag[r][c+1])return [r,c];});
+  const before=await Ljson(p);
+  await clickSvg(p,`[data-cell="${cell[0]},${cell[1]}"]`);
+  assert.notEqual(await p.evaluate(([r,c])=>window.__nest.state.L.diag[r][c],cell),0);
+  await p.click('#undo');
+  assert.equal(await Ljson(p),before);
+  await p.click('[data-tool="jog"]');
+  const edge=await p.evaluate(()=>{const s=window.__nest.state,L=s.L;
+    for(let j=1;j<L.rows;j++)for(let k=1;k<L.cols-1;k++)if(L.H[j][k]==='solid'&&!L.jogH[j][k]&&document.querySelector(`[data-edge="H,${j},${k}"]`))return [j,k];});
+  const n=await p.evaluate(()=>window.__nest.state.geo.pieces.filter(q=>q.kind==='angle').length);
+  await clickSvg(p,`[data-edge="H,${edge[0]},${edge[1]}"]`);
+  assert.equal(await p.evaluate(()=>window.__nest.state.geo.pieces.filter(q=>q.kind==='angle').length),n+2);
+});
 await check('export buttons are enabled when rules pass, disabled on an error',async p=>{
   assert.equal(await p.evaluate(()=>window.__nest.state.rules.ok),true);
   assert.equal(await p.$eval('#exports button[data-file="0"]',b=>b.disabled),false);

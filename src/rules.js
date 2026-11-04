@@ -42,6 +42,8 @@ export function checkRules(G,L,P,geo){
   }
   let sp=0;for(const c of ch.list)if(spc.get(c.id)>2){sp++;bad.add(c.id);}
   if(sp)msgs.push(['error',`${sp} chamber(s) have more than 2 sponges.`]);
+  const lone=ch.list.filter(c=>c.cells.length===1&&c.cells[0][2]);
+  if(lone.length){msgs.push(['error',`${lone.length} chamber(s) are a lone triangle, too small to use.`]);lone.forEach(c=>bad.add(c.id));}
   const brood=ch.list.filter(c=>c.brood);
   if(brood.length&&!brood.some(c=>c.active))msgs.push(['error','The starting area has no brood chamber.']);
   const wantS=Math.max(0,Math.round(P.sponges||0));
@@ -60,6 +62,10 @@ export function checkRules(G,L,P,geo){
   const noTabs=geo.pieces.filter(pc=>pc.notches.length&&!pc.top.length).length;
   if(noTabs)msgs.push(['warn',`${noTabs} tunnel strip(s) are too short for tabs. Shorten the tab length or glue them.`]);
   if(geo.minWeb<1)msgs.push(['warn',`Two cuts in a sheet are only ${geo.minWeb.toFixed(2)}mm apart and may crack.`]);
+  const shortA=geo.pieces.filter(p=>p.kind==='angle'&&!p.top.length).length;
+  if(shortA)msgs.push(['warn',`${shortA} angled strip(s) are too short for tabs and rely on glue alone. A larger jog size fixes this.`]);
+  const nAngle=geo.pieces.filter(p=>p.kind==='angle').length;
+  if(nAngle)msgs.push(['info',`${nAngle} angled strip(s). Their joints leave small wedge gaps: seal them with thickened acrylic cement, then sand, and let it cure fully before ants go in.`]);
   for(const e of geo.errors)msgs.push(['error',e]);
   for(const w of geo.warnings)msgs.push(['warn',w]);
   const ok=!msgs.some(m=>m[0]==='error');

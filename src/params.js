@@ -59,6 +59,12 @@ export const PARAMS=[
   {k:'sponges',l:'Sponges',d:3,step:1},
   {k:'dampSide',l:'Damp side',d:'left',opts:[['left','Left'],['right','Right'],['top','Top'],['bottom','Bottom'],['none','None (spread)']]},
  ]],
+ ['Angled shapes (need glue)',false,[
+  {k:'angled',l:'Use angled shapes',d:false,bool:true,h:'Off keeps the nest a pure jigsaw. On adds diagonal walls and jogs, whose joints must be sealed with acrylic cement and sand.'},
+  {k:'diagShare',l:'Diagonal cells (0 to 1)',d:0.15,step:0.05},
+  {k:'jogShare',l:'Jogged walls (0 to 1)',d:0.6,step:0.05,h:'Share of solid walls. Walls with tunnels or sponges stay straight.'},
+  {k:'jogSize',l:'Jog size (mm)',d:8,step:0.5,h:'Under 8mm the angled strip has no room for a tab. Under 6mm there are no jogs.'},
+ ]],
  ['Export',false,[
   {k:'stockW',l:'Wall sheet stock width (mm)',d:600},
   {k:'stockH',l:'Wall sheet stock height (mm)',d:400},
@@ -67,5 +73,5 @@ export const PARAMS=[
   {k:'engraveIds',l:'Engrave part IDs',d:true,bool:true},
  ]],
 ];
-export const GEN_KEYS=new Set(['seed','brood','oddShare','oddMax','activeCount','growFrom','loops','sponges','dampSide']);
+export const GEN_KEYS=new Set(['seed','brood','oddShare','oddMax','angled','diagShare','jogShare','jogSize','activeCount','growFrom','loops','sponges','dampSide']);
 export const ALL_FIELDS=PARAMS.flatMap(g=>g[2]);

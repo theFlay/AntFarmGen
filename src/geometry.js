@@ -1,5 +1,5 @@
-import {f1,rectPts} from './util.js';
-import {stH,stV,chambers,chamberCenter,interiorEdges,getEdge} from './layout.js';
+import {f1,rectPts,polysOverlap} from './util.js';
+import {stH,stV,chambers,chamberCenter,unitCenter,interiorEdges,getEdge} from './layout.js';
 import {doorType} from './doors.js';
 import {spongeLength} from './generate.js';
 /* ---------------- geometry ---------------- */
@@ -51,11 +51,23 @@ export function buildGeometry(G,L,P){
     const pt=orient==='H'?[uc,c]:[c,uc];
     fills.push({x:pt[0],y:pt[1],id});
   }
-  function runPieces(orient,line,c,a,b,s,e,segState,segCenter){
+  const angles=[];
+  function runPieces(orient,line,c,a,b,s,e,segState,segCenter,jogAt=()=>0){
     let cur={s,notches:[]};
     for(let q=a;q<b;q++){
       const st=segState(q),uc=segCenter(q);
       if(st==='tunnel')cur.notches.push(uc);
+      const off=st==='solid'?jogAt(q):0;
+      if(off){
+        // out and back, so both ends of the wall stay on the grid and junctions are untouched
+        const flat=cellW*0.18,m=Math.abs(off),b1=uc-flat-m,b2=uc-flat,b3=uc+flat,b4=uc+flat+m;
+        const stub=push(orient,line,c,cur.s,b1+t/2,cur.notches,'wall');
+        if(stub)stub.adapt=true;
+        const mid=push(orient,line,c+off,b2-t/2,b3+t/2,[],'wall');
+        if(mid)mid.adapt=true;
+        angles.push([[b1,c],[b2,c+off]],[[b3,c+off],[b4,c]]);
+        cur={s:b4-t/2,notches:[],adapt:true};
+      }
       if(st==='sponge'){
         const Ls=spongeLength(P,G);
         if(Ls<8){errors.push(`Sponge on ${orient}${line} does not fit: cells too small for a ${P.spongeLen}mm pocket.`);continue;}
@@ -64,7 +76,8 @@ export function buildGeometry(G,L,P){
         cur={s:uc+Ls/2+t,notches:[]};
       }
     }
-    push(orient,line,c,cur.s,e,cur.notches,'wall');
+    const last=push(orient,line,c,cur.s,e,cur.notches,'wall');
+    if(last&&cur.adapt)last.adapt=true;
   }
   // horizontal walls run straight through junctions
   for(let j=1;j<rows;j++){
@@ -73,7 +86,7 @@ export function buildGeometry(G,L,P){
       if(!present(hS(j,k))){k++;continue;}
       const a=k;while(k<cols&&present(hS(j,k)))k++;const b=k;
       const s=a===0?B:xs[a]-t/2, e=b===cols?W-B:xs[b]+t/2;
-      runPieces('H',j,ys[j],a,b,s,e,q=>hS(j,q),q=>(xs[q]+xs[q+1])/2);
+      runPieces('H',j,ys[j],a,b,s,e,q=>hS(j,q),q=>(xs[q]+xs[q+1])/2,q=>L.jogH[j][q]);
     }
   }
   // vertical walls butt against horizontal ones
@@ -87,6 +100,20 @@ export function buildGeometry(G,L,P){
       const b=r;
       const s=a===0?B:(covered(a,i)?ys[a]+t/2:ys[a]-t/2);
       const e=b===rows?H-B:(covered(b,i)?ys[b]-t/2:ys[b]+t/2);
+      const off=vS(a,i)==='solid'?L.jogV[a][i]:0;
+      if(off){
+        // a vertical wall butts a horizontal wall at both ends, so its lower half can simply sit to one side
+        const k=off>0?i:i-1;
+        const ok=b===a+1&&a>=1&&b<rows&&present(hS(a,k))&&present(hS(b,k));
+        if(ok){
+          const uc=(ys[a]+ys[b])/2,m=Math.abs(off),b1=uc-m/2,b2=uc+m/2;
+          const top=push('V',i,xs[i],s,b1+t/2,[],'wall'),bot=push('V',i,xs[i]+off,b2-t/2,e,[],'wall');
+          for(const x of [top,bot])if(x)x.adapt=true;
+          angles.push([[xs[i],b1],[xs[i]+off,b2]]);
+          continue;
+        }
+        warnings.push(`A jog on wall V${i} was skipped: it needs a solid wall at both ends.`);
+      }
       runPieces('V',i,xs[i],a,b,s,e,q=>vS(q,i),q=>(ys[q]+ys[q+1])/2);
     }
   }
@@ -113,12 +140,43 @@ export function buildGeometry(G,L,P){
       }
     }
   }
+  // diagonal walls run corner to corner
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    if(L.diag[r][c]===1)angles.push([[xs[c],ys[r+1]],[xs[c+1],ys[r]]]);
+    if(L.diag[r][c]===2)angles.push([[xs[c],ys[r]],[xs[c+1],ys[r+1]]]);
+  }
+  // Angled strips go in last. Each is trimmed until it just touches what it meets, so the
+  // straight strips run past the joint and the gap left is a closed wedge, never a slot.
+  const footprint=pc=>pc.poly||(pc.orient==='H'?rectPts(pc.s,pc.c-t/2,pc.e,pc.c+t/2):rectPts(pc.c-t/2,pc.s,pc.c+t/2,pc.e));
+  const obstacles=pieces.map(footprint).concat([rectPts(0,0,W,B),rectPts(0,H-B,W,H),rectPts(0,0,B,H),rectPts(W-B,0,W,H)]);
+  const band=(p,q)=>{
+    const dx=q[0]-p[0],dy=q[1]-p[1],l=Math.hypot(dx,dy)||1,nx=-dy/l*t/2,ny=dx/l*t/2;
+    return [[p[0]+nx,p[1]+ny],[q[0]+nx,q[1]+ny],[q[0]-nx,q[1]-ny],[p[0]-nx,p[1]-ny]];
+  };
+  angles.forEach(([p,q],n)=>{
+    const full=Math.hypot(q[0]-p[0],q[1]-p[1]),ux=(q[0]-p[0])/full,uy=(q[1]-p[1])/full;
+    const at=(from,s)=>[from[0]+s*ux,from[1]+s*uy];
+    const trim=(from,sign)=>{
+      let s=0;
+      const hit=v=>{const a=at(from,sign*v),b=at(from,sign*(v+0.5));const f=band(a,b);return obstacles.some(o=>polysOverlap(f,o));};
+      if(!hit(0)){errors.push('A diagonal wall ends in open space, so ants could pass around it.');return 0;}
+      while(s<full/2&&hit(s))s+=0.02;
+      return s;
+    };
+    const s0=trim(p,1),s1=trim(q,-1);
+    const a=at(p,s0),b=at(q,-s1),len=full-s0-s1;
+    if(len<4){errors.push('An angled wall is too short to cut.');return;}
+    const pc={id:'A'+(n+1),orient:'D',kind:'angle',c:0,s:0,e:len,p0:a,dir:[ux,uy],notches:[],windows:[],poly:band(a,b)};
+    pieces.push(pc);obstacles.push(pc.poly);
+  });
   // tabs and slots
   const slotsFront=[],slotsBack=[];
   const cl=P.slotClear;
   for(const pc of pieces){
     const len=pc.e-pc.s;
-    pc.top=pc.kind==='lip'?[pc.tabL/2]:tabPositions(len,pc.notches.map(x=>x-pc.s),G,P);
+    const small=(pc.kind==='angle'||pc.adapt)&&len<P.tabL+2*(t+1);
+    if(small){const tl=Math.min(P.tabL,len-3);if(tl>=3)pc.tabL=tl;pc.top=tl>=3?[len/2]:[];}
+    else pc.top=pc.kind==='lip'?[pc.tabL/2]:tabPositions(len,pc.notches.map(x=>x-pc.s),G,P);
     pc.bot=pc.top.slice();
     if(pc.kind==='vent'){
       const pitch=P.slotW+2.5, a0=t+1.5, a1=len-(t+1.5);
@@ -127,6 +185,11 @@ export function buildGeometry(G,L,P){
     const slot=(u)=>{
       const g=pc.s+u;
       const tl=(pc.tabL||P.tabL)/2;
+      if(pc.orient==='D'){
+        const [x,y]=[pc.p0[0]+pc.dir[0]*u,pc.p0[1]+pc.dir[1]*u],[ux,uy]=pc.dir,a=tl+cl/2,b=t/2+cl/2;
+        const poly=[[x-ux*a-uy*b,y-uy*a+ux*b],[x+ux*a-uy*b,y+uy*a+ux*b],[x+ux*a+uy*b,y+uy*a-ux*b],[x-ux*a+uy*b,y-uy*a-ux*b]];
+        return {poly,x0:Math.min(...poly.map(v=>v[0])),x1:Math.max(...poly.map(v=>v[0])),y0:Math.min(...poly.map(v=>v[1])),y1:Math.max(...poly.map(v=>v[1]))};
+      }
       return pc.orient==='H'?{x0:g-tl-cl/2,x1:g+tl+cl/2,y0:pc.c-t/2-cl/2,y1:pc.c+t/2+cl/2}
                             :{x0:pc.c-t/2-cl/2,x1:pc.c+t/2+cl/2,y0:g-tl-cl/2,y1:g+tl+cl/2};
     };
@@ -135,7 +198,9 @@ export function buildGeometry(G,L,P){
   }
   // footprints
   for(const pc of pieces){
-    pc.rect=pc.orient==='H'?{x0:pc.s,x1:pc.e,y0:pc.c-t/2,y1:pc.c+t/2}:{x0:pc.c-t/2,x1:pc.c+t/2,y0:pc.s,y1:pc.e};
+    pc.poly=footprint(pc);
+    const X=pc.poly.map(v=>v[0]),Y=pc.poly.map(v=>v[1]);
+    pc.rect={x0:Math.min(...X),x1:Math.max(...X),y0:Math.min(...Y),y1:Math.max(...Y)};
   }
   // ports
   const ports=[];
@@ -154,7 +219,7 @@ export function buildGeometry(G,L,P){
           const r=Math.min(rows-1,Math.max(0,Math.floor((q-B)/cellH)));const c=side==='left'?0:cols-1;cell=[r,c];
           for(let j=1;j<rows;j++)if(present(hS(j,c))&&Math.abs(q-ys[j])<t/2+w/2+0.5){p.cut=false;p.why='lands on a wall';}
         }
-        p.cell=cell;p.chamber=ch.id[cell[0]][cell[1]];p.active=L.active[cell[0]][cell[1]];
+        p.cell=cell;p.chamber=ch.at(cell[0],cell[1],side);p.active=ch.list[p.chamber].active;
         ports.push(p);
       }
     }
@@ -216,7 +281,7 @@ export function buildGeometry(G,L,P){
   const ventAt=([cx,cy])=>{for(let a=0;a<vg;a++)for(let b=0;b<vg;b++)vents.push({x:cx+(a-(vg-1)/2)*vp,y:cy+(b-(vg-1)/2)*vp});};
   // a brood chamber is a clear square; odd shapes get vents per cell, because their centre can fall on a wall
   if(vg>0)for(const c of ch.list){
-    if(c.merged&&!c.brood)for(const [r,cc] of c.cells)ventAt([(xs[cc]+xs[cc+1])/2,(ys[r]+ys[r+1])/2]);
+    if(c.merged&&!c.brood)for(const u of c.cells)ventAt(unitCenter(G,u));
     else ventAt(chamberCenter(G,c));
   }
   // sanity checks
@@ -236,12 +301,13 @@ export function buildGeometry(G,L,P){
   }
   for(let a=0;a<pieces.length;a++)for(let b=a+1;b<pieces.length;b++){
     const p=pieces[a].rect,q=pieces[b].rect;
-    const ox=Math.min(p.x1,q.x1)-Math.max(p.x0,q.x0), oy=Math.min(p.y1,q.y1)-Math.max(p.y0,q.y0);
-    if(ox>1e-4&&oy>1e-4)errors.push(`Geometry: ${pieces[a].id} overlaps ${pieces[b].id}.`);
+    if(Math.min(p.x1,q.x1)-Math.max(p.x0,q.x0)<=0||Math.min(p.y1,q.y1)-Math.max(p.y0,q.y0)<=0)continue;
+    if(polysOverlap(pieces[a].poly,pieces[b].poly))errors.push(`Geometry: ${pieces[a].id} overlaps ${pieces[b].id}.`);
   }
   // thinnest strip of acrylic left between two cuts in the service sheet
   const asRect=(x,y,r)=>({x0:x-r,x1:x+r,y0:y-r,y1:y+r});
-  const front=(G.service==='front'?slotsFront:slotsBack).concat(doorSlots,
+  // rotated slots are left out: their bounding boxes would overstate how close they are
+  const front=(G.service==='front'?slotsFront:slotsBack).filter(s=>!s.poly).concat(doorSlots,
     vents.map(v=>asRect(v.x,v.y,P.ventD/2)),fills.map(f=>asRect(f.x,f.y,P.fillD/2)));
   let minWeb=1e9;
   for(let a=0;a<front.length;a++)for(let b=a+1;b<front.length;b++){

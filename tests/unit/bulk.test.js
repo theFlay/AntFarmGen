@@ -19,7 +19,7 @@ test('every tab slot sits where its strip tab lands',()=>{
       const want=[];
       for(const pc of geo.pieces)for(const u of pc[key]){
         const g=pc.s+u;
-        want.push(pc.orient==='H'?[g,pc.c]:[pc.c,g]);
+        want.push(pc.orient==='D'?[pc.p0[0]+pc.dir[0]*u,pc.p0[1]+pc.dir[1]*u]:pc.orient==='H'?[g,pc.c]:[pc.c,g]);
       }
       assert.equal(want.length,sheet.length);
       for(const [x,y] of want)assert.ok(sheet.some(s=>Math.abs((s.x0+s.x1)/2-x)<1e-6&&Math.abs((s.y0+s.y1)/2-y)<1e-6),`no slot at ${x},${y}`);

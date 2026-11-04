@@ -1,5 +1,5 @@
 import {mulberry32,shuffle} from './util.js';
-import {emptyLayout,chambers,adjacency,chamberCenter,interiorEdges,getEdge,setEdge,broodCells,mergeOf} from './layout.js';
+import {emptyLayout,chambers,adjacency,chamberCenter,interiorEdges,getEdge,setEdge,broodCells,mergeOf,addDiagonal,removeDiagonal,setActive,stH} from './layout.js';
 
 /* Every chamber is built and joined up. The active setting only picks which doors start open,
    so the cut files do not depend on it. The starting area always holds a port, a sponge and
@@ -17,12 +17,41 @@ export function generate(G,P){
     }
   }
   growOddChambers(G,P,L,rnd);
-  const ch=chambers(L), adj=adjacency(L,ch);
-  const ids=ch.list.map(c=>c.id);
-  // spanning tree with at most 3 tunnels per chamber, relaxed only if that proves impossible
+  if(P.angled)growDiagonals(G,P,L,rnd);
+  // Diagonals cannot hold tunnels, so a chamber can end up walled in or too dependent on
+  // one neighbour. If the maze cannot be built, drop a diagonal and try again.
+  let ch,adj,ids,deg,done;
+  for(;;){
+    ch=chambers(L);adj=adjacency(L,ch);ids=ch.list.map(c=>c.id);
+    done=buildTree(G,L,ids,adj,pick);
+    const split=[];for(let r=0;r<G.rows;r++)for(let c=0;c<G.cols;c++)if(L.diag[r][c])split.push([r,c]);
+    if(done.ok||!split.length)break;
+    removeDiagonal(L,...pick(split));
+  }
+  deg=done.deg;
+  // extra loops
+  const extra=Math.round(Math.max(0,P.loops||0)*ids.length);
+  const pairs=[];for(const a of ids)for(const [b,es] of adj.get(a))if(a<b)pairs.push([a,b,es]);
+  shuffle(pairs,rnd);let added=0;
+  for(const [a,b,es] of pairs){
+    if(added>=extra)break;
+    if(deg.get(a)>=3||deg.get(b)>=3)continue;
+    if(es.some(e=>getEdge(L,e)==='tunnel'))continue;
+    setEdge(L,pick(es),'tunnel');deg.set(a,deg.get(a)+1);deg.set(b,deg.get(b)+1);added++;
+  }
+  // starting area, grown along tunnels
+  const start=startArea(G,P,L,ch,rnd,pick);
+  for(const c of ch.list)for(const u of c.cells)setActive(L,u,start.has(c.id));
+  placeSponges(G,P,L,ch,start,rnd);
+  if(P.angled)placeJogs(G,P,L,ch,rnd);
+  return L;
+}
+// spanning tree with at most 3 tunnels per chamber, relaxed only when no diagonals are left to drop
+function buildTree(G,L,ids,adj,pick){
+  const relax=!L.diag.some(row=>row.some(Boolean));
   let deg=new Map(),done=false;
   for(let attempt=0;attempt<60&&!done;attempt++){
-    const cap=attempt>=50?99:3;
+    const cap=relax&&attempt>=50?99:3;
     for(let j=0;j<=G.rows;j++)L.H[j].fill('solid');
     for(let r=0;r<G.rows;r++)L.V[r].fill('solid');
     deg=new Map(ids.map(i=>[i,0]));
@@ -36,22 +65,7 @@ export function generate(G,P){
     }
     if(inT.size===ids.length)done=true;
   }
-  // extra loops
-  const extra=Math.round(Math.max(0,P.loops||0)*ids.length);
-  const pairs=[];for(const a of ids)for(const [b,es] of adj.get(a))if(a<b)pairs.push([a,b,es]);
-  shuffle(pairs,rnd);let added=0;
-  for(const [a,b,es] of pairs){
-    if(added>=extra)break;
-    if(deg.get(a)>=3||deg.get(b)>=3)continue;
-    if(es.some(e=>getEdge(L,e)==='tunnel'))continue;
-    setEdge(L,pick(es),'tunnel');deg.set(a,deg.get(a)+1);deg.set(b,deg.get(b)+1);added++;
-  }
-  // starting area, grown along tunnels
-  const start=startArea(G,P,L,ch,rnd,pick);
-  for(let r=0;r<G.rows;r++)L.active[r].fill(true);
-  for(const c of ch.list)if(!start.has(c.id))for(const [r,cc] of c.cells)L.active[r][cc]=false;
-  placeSponges(G,P,L,ch,start,rnd);
-  return L;
+  return {ok:done,deg};
 }
 
 // Random region growing: joins free cells into chambers of 2 up to oddMax cells.
@@ -79,6 +93,48 @@ function growOddChambers(G,P,L,rnd){
   }
 }
 
+function growDiagonals(G,P,L,rnd){
+  const share=Math.min(1,Math.max(0,P.diagShare||0));
+  const cells=[];for(let r=0;r<G.rows;r++)for(let c=0;c<G.cols;c++)if(mergeOf(L,r,c)<0)cells.push([r,c]);
+  shuffle(cells,rnd);
+  let want=Math.round(share*cells.length);
+  for(const [r,c] of cells){
+    if(want<=0)break;
+    if(addDiagonal(L,r,c,rnd()<0.5?1:2,rnd))want--;
+  }
+}
+const edgeCells=e=>e.type==='H'?[[e.j-1,e.k],[e.j,e.k]]:[[e.r,e.i-1],[e.r,e.i]];
+// A jog needs room, so each chamber gets one at most and never shares it with a sponge or diagonal.
+function placeJogs(G,P,L,ch,rnd){
+  const share=Math.min(1,Math.max(0,P.jogShare||0));
+  if(share<=0)return;
+  const edges=interiorEdges(L,ch);
+  const busy=new Set();
+  for(const e of edges)if(getEdge(L,e)==='sponge'){busy.add(e.a);busy.add(e.b);}
+  const size=Math.min(P.jogSize,Math.min(G.cellW,G.cellH)/5);
+  if(size<6)return; // smaller jogs leave an angled strip too short to cut
+  const cand=[];
+  for(const e of edges){
+    if(getEdge(L,e)!=='solid')continue;
+    if(edgeCells(e).some(([r,c])=>L.diag[r][c]))continue;
+    if(e.type==='V'&&(e.r===0||e.r===G.rows-1))continue;
+    cand.push(e);
+  }
+  shuffle(cand,rnd);
+  let want=Math.round(share*cand.length);
+  for(const e of cand){
+    if(want<=0)break;
+    if(busy.has(e.a)||busy.has(e.b))continue;
+    const sign=rnd()<0.5?1:-1;
+    if(e.type==='V'){
+      const k=sign>0?e.i:e.i-1;
+      if(stH(L,e.r,k)==='none'||stH(L,e.r+1,k)==='none')continue;
+      L.jogV[e.r][e.i]=sign*size;
+    }else L.jogH[e.j][e.k]=sign*size;
+    busy.add(e.a);busy.add(e.b);want--;
+  }
+}
+
 function tunnelGraph(L,ch){
   const g=new Map(ch.list.map(c=>[c.id,new Set()]));
   for(const e of interiorEdges(L,ch))if(getEdge(L,e)==='tunnel'){g.get(e.a).add(e.b);g.get(e.b).add(e.a);}
@@ -100,7 +156,7 @@ function startArea(G,P,L,ch,rnd,pick){
   const g=tunnelGraph(L,ch);
   const tgt={left:[P.B,P.H/2],right:[P.W-P.B,P.H/2],top:[P.W/2,P.B],bottom:[P.W/2,P.H-P.B],center:[P.W/2,P.H/2]}[P.growFrom]||[P.W/2,P.H/2];
   const dist=c=>{const [x,y]=chamberCenter(G,c);return (x-tgt[0])**2+(y-tgt[1])**2;};
-  const portCh=new Set(portCells(G,P).map(p=>ch.id[p.cell[0]][p.cell[1]]));
+  const portCh=new Set(portCells(G,P).map(p=>ch.at(p.cell[0],p.cell[1],p.side)));
   const pool=P.growFrom!=='center'&&portCh.size?ch.list.filter(c=>portCh.has(c.id)):ch.list;
   const seed=pool.slice().sort((a,b)=>dist(a)-dist(b))[0];
   const set=new Set([seed.id]);
@@ -124,6 +180,7 @@ function placeSponges(G,P,L,ch,start,rnd){
   const cand=[];
   for(const e of interiorEdges(L,ch)){
     if(getEdge(L,e)!=='solid')continue;
+    if(edgeCells(e).some(([r,c])=>L.diag[r][c]))continue;
     let mx,my;
     if(e.type==='H'){mx=(G.xs[e.k]+G.xs[e.k+1])/2;my=G.ys[e.j];}else{mx=G.xs[e.i];my=(G.ys[e.r]+G.ys[e.r+1])/2;}
     const u=(mx-P.B)/G.innerW,v=(my-P.B)/G.innerH;
