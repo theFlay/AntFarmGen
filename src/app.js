@@ -9,6 +9,9 @@ import {offsetPoly} from './offset.js';
 import {stripOutline} from './strip.js';
 import {drawTopdown} from './draw.js';
 import {exporters,testPiece} from './export.js';
+import {portCells} from './generate.js';
+import {cleanLayout,cleanParam,escapeHtml} from './sanitize.js';
+import JSZip from 'jszip';
 function buildForm(){
   const root=document.getElementById('controls');
   let html='';
@@ -41,11 +44,10 @@ function readParams(){
   for(const f of ALL_FIELDS){
     const el=document.getElementById('p_'+f.k);
     if(f.bool) P[f.k]=el.checked;
-    else if(f.opts||f.color) P[f.k]=el.value;
+    else if(f.opts||f.color) P[f.k]=cleanParam(f,el.value);
     else{
       const s=el.value.trim();
-      if(s===''){ P[f.k]=f.opt?null:f.d; }
-      else{ const n=parseFloat(s); P[f.k]=isFinite(n)?n:(f.opt?null:f.d); }
+      P[f.k]=cleanParam(f,s===''?null:parseFloat(s));
     }
   }
   return P;
@@ -76,7 +78,7 @@ function render(){
   rules=checkRules(G,L,P,geo);
   document.getElementById('preview').innerHTML=drawTopdown(G,L,P,geo,rules,{interactive:true,tool});
   document.getElementById('toolhelp').textContent=TOOLHELP[tool];
-  document.getElementById('checks').innerHTML=rules.msgs.map(([lv,m])=>`<div class="msg ${lv}">${m}</div>`).join('');
+  document.getElementById('checks').innerHTML=rules.msgs.map(([lv,m])=>`<div class="msg ${lv}">${escapeHtml(m)}</div>`).join('');
   const act=geo.ch.list.filter(c=>c.active);
   let tunnels=0,spongesN=0;
   for(const e of interiorEdges(L,geo.ch)){const s=getEdge(L,e);if(s==='tunnel')tunnels++;if(s==='sponge')spongesN++;}
@@ -88,17 +90,21 @@ function render(){
     ['Tunnels',`${f1(G.tunnelW)} wide x ${f1(G.tunnelH)} high`],['Open at start',`${act.length} of ${geo.ch.list.length} chambers`],
     ['Tunnels / sponges',`${tunnels} / ${spongesN}`],['Strip parts',`${geo.pieces.length} (${f1(stripLen/1000)} m)`],
     ['Wall sheets',`${ex.stripSheets} at ${P.stockW} x ${P.stockH}`],['Frame',`${geo.frame.length} pieces x ${P.layers} layers`],
-    ['Doors',`${geo.doors.length} (${geo.doors.filter(d=>d.closed).length} start closed)`],['Fasteners',`${geo.fasteners.length} ${P.fastener==='peg'?'pegs and keys':P.fastener==='bolt'?'bolts':''}`],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
+    ['Ports that always line up',lineUp()],['Doors',`${geo.doors.length} (${geo.doors.filter(d=>d.closed).length} start closed)`],['Fasteners',`${geo.fasteners.length} ${P.fastener==='peg'?'pegs and keys':P.fastener==='bolt'?'bolts':''}`],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
   ];
-  document.getElementById('stats').innerHTML=st.map(([a,b])=>`<div><span>${a}:</span> ${b}</div>`).join('');
+  document.getElementById('stats').innerHTML=st.map(([a,b])=>`<div><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
   document.getElementById('derived').textContent=`Pitch target ${f1(G.pitch)}mm, actual cells ${f1(G.cellW)} x ${f1(G.cellH)}mm, tunnels ${f1(G.tunnelW)}mm wide, depth ${f1(G.depth)}mm.${G.adjusted?' Cell count nudged so ports miss the walls.':''}`;
   const exDiv=document.getElementById('exports');
   exDiv.innerHTML=ex.files.map((f,i)=>`<button data-file="${i}"${rules.ok?'':' disabled'}>${f.name}</button>`).join('')+
-    `<button id="zipAll" class="primary"${rules.ok&&window.JSZip?'':' disabled'}>All as .zip</button>`;
+    `<button id="zipAll" class="primary"${rules.ok?'':' disabled'}>All as .zip</button>`;
   exDiv._files=ex.files;
   if(!rules.ok)setStatus('Fix the errors in Checks to enable export.');
-  else if(!window.JSZip)setStatus('Files can be saved one at a time (zip support did not load).');
   else setStatus('');
+}
+// ports that stay cut on any layout with these settings, so two panels can always connect
+function lineUp(){
+  const by={};for(const p of portCells(G,P))(by[p.side]=by[p.side]||[]).push(p.pos);
+  return Object.entries(by).map(([s,v])=>`${s} ${v.join(', ')}`).join('; ')||'none';
 }
 function setStatus(s){document.getElementById('status').textContent=s;}
 
@@ -214,7 +220,7 @@ function init(){
     const div=ev.currentTarget,b=ev.target.closest('button');if(!b||b.disabled)return;
     if(b.id==='zipAll'){
       try{
-        const zip=new window.JSZip();for(const f of div._files)zip.file(f.name,f.data);
+        const zip=new JSZip();for(const f of div._files)zip.file(f.name,f.data);
         zip.file('layout.json',layoutJSON());
         const blob=await zip.generateAsync({type:'blob'});
         await saveFile(`nest-${P.W}x${P.H}-seed${P.seed}.zip`,blob);
@@ -232,19 +238,15 @@ function init(){
     try{
       const j=JSON.parse(await file.text());
       if(!j.layout||!j.params)throw new Error('not a layout file');
-      const l=j.layout,g=derive(Object.assign({},P,j.params));
-      if(!Array.isArray(l.H)||!Array.isArray(l.V)||!Array.isArray(l.active)||!Array.isArray(l.merges))throw new Error('layout data is incomplete');
-      if(l.cols!==g.cols||l.rows!==g.rows)throw new Error(`layout is ${l.cols} x ${l.rows} but these settings give ${g.cols} x ${g.rows}`);
+      if(typeof j.params!=='object')throw new Error('settings are missing');
+      const np=Object.fromEntries(ALL_FIELDS.map(f=>[f.k,f.k in j.params?cleanParam(f,j.params[f.k]):P[f.k]]));
+      const clean=cleanLayout(normalizeLayout(j.layout),derive(np));
       snapshot();
-      for(const f of ALL_FIELDS)if(f.k in j.params)setField(f,j.params[f.k]);
-      P=readParams();L=normalizeLayout(l);render();setStatus('Loaded '+file.name+'.');
+      for(const f of ALL_FIELDS)setField(f,np[f.k]);
+      P=readParams();L=clean;render();setStatus('Loaded '+file.name+'.');
     }catch(e){setStatus('Could not load: '+e.message);}
     fi.value='';
   });
-  const s=document.createElement('script');
-  s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-  s.onload=()=>render();s.onerror=()=>{};
-  document.head.appendChild(s);
 }
 function layoutJSON(){return JSON.stringify({app:'ant-nest-panel-generator',version:2,params:P,layout:L},null,1);}
 window.__nest={get state(){return {P,G,L,geo,rules};},derive,generate,buildGeometry,checkRules,exporters,offsetPoly,stripOutline,testPiece};

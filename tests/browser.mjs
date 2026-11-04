@@ -106,6 +106,34 @@ await check('test piece button works even with an error showing',async p=>{
   assert.equal(name,'test-piece.svg');
   assert.equal(await p.$eval('#testPiece',b=>b.disabled),false);
 });
+await check('a crafted layout file cannot run code in the page',async p=>{
+  const file=await p.evaluate(()=>{const s=window.__nest.state;
+    const L=JSON.parse(JSON.stringify(s.L));
+    L.merges.push({cells:[[3,8,'"><img src=x onerror="window.__pwned=1">'],[2,8]],brood:false});
+    return JSON.stringify({app:'x',version:2,params:s.P,layout:L});});
+  await p.setInputFiles('#loadLayout',{name:'evil.json',mimeType:'application/json',buffer:Buffer.from(file)});
+  await p.waitForTimeout(300);
+  assert.equal(await p.evaluate(()=>window.__pwned),undefined,'injected handler ran');
+  assert.equal(await p.$('#preview img'),null,'injected element reached the page');
+});
+await check('the page refuses injected scripts even if one reaches the DOM',async p=>{
+  await p.evaluate(()=>{document.getElementById('status').innerHTML='<img src=x onerror="window.__pwned=1">';});
+  await p.waitForTimeout(200);
+  assert.equal(await p.evaluate(()=>window.__pwned),undefined);
+});
+await check('a saved layout loads back exactly, including angled shapes',async p=>{
+  await p.$eval('#p_angled',e=>{e.checked=true;e.dispatchEvent(new Event('change'));});
+  const before=await Ljson(p);
+  const file=await p.evaluate(()=>{const s=window.__nest.state;return JSON.stringify({app:'x',version:2,params:s.P,layout:s.L});});
+  await clickSvg(p,'[data-edge="H,1,0"]');
+  await p.setInputFiles('#loadLayout',{name:'ok.json',mimeType:'application/json',buffer:Buffer.from(file)});
+  await p.waitForTimeout(300);
+  assert.deepEqual(JSON.parse(await Ljson(p)),JSON.parse(before));
+});
+await check('zip export works with no network',async p=>{
+  const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#zipAll')]);
+  assert.match(dl.suggestedFilename(),/\.zip$/);
+});
 await browser.close();
 if(failed){console.log(failed,'browser test(s) failed');process.exit(1);}
 console.log('all browser tests passed');

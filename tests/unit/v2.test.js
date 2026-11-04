@@ -88,6 +88,37 @@ test('fasteners and cover sockets avoid ports and each other',()=>{
     }
   }
 });
+test('joiner slots sit on a fixed grid, clear of everything else in the border',()=>{
+  const sig=r=>r.geo.joints.map(j=>j.side+j.pos).join();
+  const a=run({},1),b=run({},9),c=run({queenWidth:8,oddShare:0.5},3);
+  assert.ok(a.geo.joints.length>=8);
+  assert.equal(sig(a),sig(b));assert.equal(sig(a),sig(c));
+  for(const cfg of [{},{W:300,H:500},{fastener:'bolt'}])for(let seed=1;seed<=10;seed++){
+    const {geo,G,P}=run(cfg,seed);
+    const rect=(o,l)=>o.along==='x'?{x0:o.x-l/2,x1:o.x+l/2,y0:o.y-G.t/2,y1:o.y+G.t/2}:{x0:o.x-G.t/2,x1:o.x+G.t/2,y0:o.y-l/2,y1:o.y+l/2};
+    const others=[...geo.fasteners.map(f=>rect(f,P.pegW)),...geo.sockets.map(s=>rect(s,geo.socketL))];
+    for(const j of geo.joints){
+      const p=rect(j,8);
+      for(const q of others)assert.ok(Math.max(p.x0-q.x1,q.x0-p.x1,p.y0-q.y1,q.y0-p.y1)>=1,`seed ${seed}`);
+      for(const port of geo.ports.filter(x=>x.cut&&x.side===j.side))assert.ok(Math.abs(port.pos-j.pos)>=G.tunnelW/2+2);
+    }
+  }
+});
+test('a joiner spans two panels exactly, and uses 2 keys',()=>{
+  const r=run({joinerQty:3},1);
+  const kit=hardwareParts(r.G,r.L,r.P,r.geo);
+  const j=kit.find(p=>p.name==='panel joiner');
+  assert.equal(j.qty,3);
+  assert.equal(j.w-8,r.P.B,'leg centres sit one border apart from the seam on each side');
+  assert.equal(kit.find(p=>p.name==='key').qty,r.geo.fasteners.length+6);
+  assert.equal(run({},1).geo.joints.length>0,true);
+  assert.ok(!hardwareParts(...(x=>[x.G,x.L,x.P,x.geo])(run({},1))).some(p=>p.name==='panel joiner'));
+});
+test('frosted floors add an engrave-only file',()=>{
+  const f=files(run({floorFinish:'frosted'},1)).find(x=>x.name==='floor-frost-layer.svg');
+  assert.ok(f);assert.match(f.data,/fill="#000000"/);assert.doesNotMatch(f.data,/stroke="#ff0000"/);
+  assert.ok(!files(run({},1)).some(x=>/frost/.test(x.name)));
+});
 test('upright nests get sand lips on floor tunnels only, and feet',()=>{
   const r=run({orient:'upright'},4);
   const lips=r.geo.pieces.filter(p=>p.kind==='lip');

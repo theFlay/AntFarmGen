@@ -2,7 +2,11 @@
 
 Enter panel and ant sizes, then laser-cut the files it gives you and assemble the nest like a jigsaw. Everything is acrylic. Cement and bolts are optional.
 
-Open `index.html` in a browser to use it. It is one self-contained file.
+Use it at [theflay.github.io/AntFarmGen](https://theflay.github.io/AntFarmGen/), or open `index.html` from a copy of this repo. It is one self-contained file.
+
+Ideas and bug reports are welcome in [Issues](https://github.com/theFlay/AntFarmGen/issues/new/choose), and chat is in [Discussions](https://github.com/theFlay/AntFarmGen/discussions).
+
+This repo is public: see [SECURITY.md](SECURITY.md). Pushes to `develop` publish the committed `index.html`, so run `npm test` before pushing.
 
 ## Working on it
 

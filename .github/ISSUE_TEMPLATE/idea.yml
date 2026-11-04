@@ -1,0 +1,18 @@
+name: Suggest an idea
+description: A feature, a better design, or a change for your species
+labels: [idea]
+body:
+  - type: markdown
+    attributes:
+      value: This repo is public. Please do not post personal details.
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What would you like, and what would it help with?
+    validations:
+      required: true
+  - type: input
+    id: species
+    attributes:
+      label: Ant species, if it matters

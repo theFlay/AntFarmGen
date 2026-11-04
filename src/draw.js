@@ -44,6 +44,10 @@ export function drawTopdown(G,L,P,geo,rules,opts){
     const hx=(b.along==='x'?P.pegW:t)/2,hy=(b.along==='x'?t:P.pegW)/2;
     o.push(`<rect x="${fmt(b.x-hx)}" y="${fmt(b.y-hy)}" width="${fmt(2*hx)}" height="${fmt(2*hy)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);
   }
+  for(const s of geo.joints){
+    const hx=s.along==='x'?4:t/2,hy=s.along==='x'?t/2:4;
+    o.push(`<rect x="${fmt(s.x-hx)}" y="${fmt(s.y-hy)}" width="${fmt(2*hx)}" height="${fmt(2*hy)}" fill="#fff4c2" stroke="#a88a2a" stroke-width="0.3"/>`);
+  }
   for(const s of geo.sockets){
     const hl=(geo.socketL-4)/2,hx=s.along==='x'?hl:t/2,hy=s.along==='x'?t/2:hl;
     o.push(`<rect x="${fmt(s.x-hx)}" y="${fmt(s.y-hy)}" width="${fmt(2*hx)}" height="${fmt(2*hy)}" fill="#f3b0b2" stroke="#b33" stroke-width="0.3"/>`);

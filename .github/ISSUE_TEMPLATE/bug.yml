@@ -1,0 +1,18 @@
+name: Report a bug
+description: Something is wrong in the app or in a cut file
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: This repo is public. Please do not post personal details.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Settings or steps to see it
+      description: A saved layout (.json) helps. Only load layout files from people you trust.

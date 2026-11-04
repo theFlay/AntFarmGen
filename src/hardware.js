@@ -19,6 +19,15 @@ export function keyPart(){
   const L=16;
   return {name:'key',w:L,h:2.6,poly:[[0,0],[L,0],[L,2.6],[0,1.6]],holes:[]};
 }
+// Panel joiner: a clip whose two legs drop through joiner slots in neighbouring panels.
+export const JOIN_LEG=8;
+export function joinerPart(G,P){
+  const leg=JOIN_LEG,hb=P.B/2,w=2*hb+leg,bar=4,end=bar+2*P.S+G.depth+2.7+2,y=bar+2*P.S+G.depth,kw=G.t+0.2,kh=2.7;
+  const hole=x=>rectPts(x-kw/2,y,x+kw/2,y+kh);
+  return {name:'panel joiner',w,h:end,
+    poly:[[0,0],[w,0],[w,end],[w-leg,end],[w-leg,bar],[leg,bar],[leg,end],[0,end]],
+    holes:[hole(leg/2),hole(w-leg/2)]};
+}
 // Port plug: a stack of T-shaped layers tied by one pin.
 export function plugPart(G,P){
   const fit=0.1,w=G.tunnelW-2*fit,head=G.tunnelW+6,headH=3,L=headH+P.B;
@@ -53,7 +62,11 @@ export function hardwareParts(G,L,P,geo){
   const out=[];
   out.push(...doorType(P).parts(G,P,geo.doors.length));
   const nf=geo.fasteners.length;
-  if(P.fastener==='peg'&&nf){out.push(Object.assign(pegPart(G,P),{qty:nf}),Object.assign(keyPart(),{qty:nf}));}
+  const nj=geo.joints.length?Math.max(0,Math.round(P.joinerQty||0)):0;
+  if(P.fastener==='peg'&&nf)out.push(Object.assign(pegPart(G,P),{qty:nf}));
+  if(nj)out.push(Object.assign(joinerPart(G,P),{qty:nj}));
+  const nk=(P.fastener==='peg'?nf:0)+2*nj;
+  if(nk)out.push(Object.assign(keyPart(),{qty:nk}));
   const nPorts=geo.ports.filter(p=>p.cut).length;
   if(nPorts){out.push(Object.assign(plugPart(G,P),{qty:nPorts*P.layers}),Object.assign(plugPinPart(G),{qty:nPorts}));}
   if(P.coverType==='whole'&&geo.sockets.length)out.push(Object.assign(coverLeg(G,P,geo),{qty:geo.sockets.length}));

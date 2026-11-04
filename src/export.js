@@ -3,7 +3,7 @@ import {polyD,offsetPoly} from './offset.js';
 import {stripOutline} from './strip.js';
 import {drawTopdown} from './draw.js';
 import {doorType} from './doors.js';
-import {hardwareParts,pegPart,keyPart,PEG_FIT} from './hardware.js';
+import {hardwareParts,pegPart,keyPart,PEG_FIT,JOIN_LEG} from './hardware.js';
 
 /* ---------------- export ---------------- */
 export function svgDoc(w,h,body,title){
@@ -43,7 +43,7 @@ function fastenerCuts(G,P,geo,d){
   return [];
 }
 function socketCuts(G,geo,d,tab){
-  return geo.sockets.map(o=>d.rect(borderSlot(o,tab,G.t,PEG_FIT)));
+  return geo.sockets.map(o=>d.rect(borderSlot(o,tab,G.t,PEG_FIT))).concat(geo.joints.map(o=>d.rect(borderSlot(o,JOIN_LEG,G.t,PEG_FIT))));
 }
 
 export function exporters(G,L,P,geo){
@@ -77,8 +77,13 @@ export function exporters(G,L,P,geo){
   }
   // cover
   if(P.coverType==='whole'&&geo.sockets.length){
-    const b=[d.outline(rectPts(0,0,W,H)),...socketCuts(G,geo,d,sockTab)];
+    const b=[d.outline(rectPts(0,0,W,H)),...geo.sockets.map(o=>d.rect(borderSlot(o,sockTab,G.t,PEG_FIT)))];
     files.push({name:'cover-sheet.svg',data:svgDoc(W,H,b.join('\n'),'Cover sheet (red acrylic)')});
+  }
+  // frosting is its own engrave file, so it never mixes with the cuts
+  if(P.floorFinish==='frosted'){
+    const body=`<path d="${polyD(rectPts(P.B,P.B,W-P.B,H-P.B))}" fill="${P.engraveColor}" stroke="none"/>`;
+    files.push({name:'floor-frost-layer.svg',data:svgDoc(W,H,body,'Frost the inside of the floor or back sheet, before cutting')});
   }
   // everything cut from the wall sheet, shelf-packed onto stock sheets
   const items=geo.pieces.map(pc=>({w:pc.e-pc.s,h:G.depth+2*P.S,draw(x,y){

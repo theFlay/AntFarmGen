@@ -234,8 +234,19 @@ export function buildGeometry(G,L,P){
   // pegs or bolts around the border
   const fastD=P.fastener==='peg'?P.pegW:P.boltD;
   const bolts=[];
-  const portNear=(side,pos)=>ports.some(p=>p.cut&&p.side===side&&Math.abs(p.pos-pos)<w/2+fastD/2+1.5);
   const hb=B/2;
+  // joiner slots sit midway between ports, so they stay on a fixed grid whatever the cells do
+  const joints=[];
+  if(P.joinSlots&&B>=12&&P.portPitch>=5){
+    for(const [side,len] of [['top',W],['bottom',W],['left',H],['right',H]]){
+      for(let q=P.portOffset+P.portPitch/2;q<len-P.portOffset;q+=P.portPitch){
+        joints.push(Object.assign({side,pos:q},
+          side==='top'?{x:q,y:hb,along:'y'}:side==='bottom'?{x:q,y:H-hb,along:'y'}:side==='left'?{x:hb,y:q,along:'x'}:{x:W-hb,y:q,along:'x'}));
+      }
+    }
+  }
+  const jointNear=(side,pos,r)=>joints.some(j=>j.side===side&&Math.abs(j.pos-pos)<r+t/2+2);
+  const portNear=(side,pos)=>ports.some(p=>p.cut&&p.side===side&&Math.abs(p.pos-pos)<w/2+fastD/2+1.5)||jointNear(side,pos,fastD/2);
   for(const [x,y] of [[hb,hb],[W-hb,hb],[W-hb,H-hb],[hb,H-hb]])bolts.push({x,y,along:'x'});
   for(const [side,len] of [['top',W],['bottom',W],['left',H],['right',H]]){
     const span=len-2*hb;const n=Math.max(1,Math.ceil(span/Math.max(10,P.boltSpacing)));
@@ -258,6 +269,7 @@ export function buildGeometry(G,L,P){
     const free=(side,pos)=>{
       const along=side==='top'||side==='bottom';
       if(ports.some(p=>p.cut&&p.side===side&&Math.abs(p.pos-pos)<w/2+socketL/2+2))return false;
+      if(jointNear(side,pos,socketL/2))return false;
       return !fasteners.some(f=>{
         const onSide=side==='top'?f.y===hb:side==='bottom'?f.y===H-hb:side==='left'?f.x===hb:f.x===W-hb;
         return onSide&&Math.abs((along?f.x:f.y)-pos)<fastD/2+socketL/2+2;
@@ -315,7 +327,7 @@ export function buildGeometry(G,L,P){
     const dx=Math.max(p.x0-q.x1,q.x0-p.x1,0),dy=Math.max(p.y0-q.y1,q.y0-p.y1,0);
     minWeb=Math.min(minWeb,Math.hypot(dx,dy));
   }
-  return {pieces,sponges,fills,slotsFront,slotsBack,doors,doorSlots,ports,frame,fasteners,sockets,socketL,vents,minWeb,errors,warnings,ch};
+  return {pieces,sponges,fills,slotsFront,slotsBack,doors,doorSlots,ports,frame,fasteners,sockets,socketL,joints,vents,minWeb,errors,warnings,ch};
 }
 
 export function framePieces(W,H,B,cuts,w){

@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src '__SCRIPT_HASH__'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>Ant nest panel generator</title>
 <style>
 :root{--bg:#f6f5f2;--card:#fff;--ink:#1f1e1c;--muted:#6b6a65;--line:#d9d6cf;--accent:#5b4fc4;--err:#c0392b;--warn:#b7791f;--ok:#2f855a}
@@ -36,6 +38,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:1px solid rgba(0,0,0,.2)}
 #status{font-size:13px;color:var(--muted);min-height:18px;margin-top:6px}
 .derived{font-size:12px;color:var(--muted);margin-top:6px}
+footer{display:flex;flex-wrap:wrap;gap:6px 18px;padding:12px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+footer a{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -71,6 +75,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
         <span><i class="sw" style="background:#2fb37a"></i>Tunnel</span>
         <span><i class="sw" style="background:#4a90d9"></i>Sponge pocket</span>
         <span><i class="sw" style="background:#b9c3c6"></i>Frame</span>
+        <span><i class="sw" style="background:#fff4c2"></i>Joiner slot</span>
         <span><i class="sw" style="background:#e5484d"></i>Problem</span>
       </div>
     </div>
@@ -89,6 +94,12 @@ button:disabled{opacity:.45;cursor:not-allowed}
     </div>
   </main>
 </div>
+<footer>
+  <a href="https://github.com/theFlay/AntFarmGen/issues/new/choose" rel="noopener">Suggest an idea or report a bug</a>
+  <a href="https://github.com/theFlay/AntFarmGen/discussions" rel="noopener">Discussions</a>
+  <a href="https://github.com/theFlay/AntFarmGen" rel="noopener">Source code</a>
+  <span>Everything runs in your browser. Nothing you enter is sent anywhere.</span>
+</footer>
 <script>
 /*__BUNDLE__*/
 </script>
