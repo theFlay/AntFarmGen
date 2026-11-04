@@ -5,7 +5,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
 let res;
 for(let i=0;i<40;i++){
   res=await fetch(url+'?check='+Date.now(),{cache:'no-store'}).catch(()=>null);
-  if(res&&res.ok&&(await res.clone().text()).includes('MIT licence'))break;
+  if(res&&res.ok&&(await res.clone().text()).includes(process.argv[2]||'MIT licence'))break;
   res=null;await wait(8000);
 }
 if(!res){console.log('site never came up');process.exit(1);}
