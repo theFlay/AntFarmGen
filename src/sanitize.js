@@ -31,6 +31,19 @@ export function cleanLayout(l,G){
     if(!Array.isArray(v)||v.length>cols*rows)fail(`${name} list is bad`);
     return v.map(u=>{if(!Array.isArray(u)||u.length!==2)fail(`bad cell in ${name}`);return cell(u);});
   };
+  const edgeList=v=>{
+    if(!Array.isArray(v)||v.length>2*cols*rows)fail('vial list is bad');
+    return v.map(e=>{
+      const ok=n=>Number.isInteger(n)&&n>=0&&n<=Math.max(rows,cols);
+      if(e&&e.type==='H'&&ok(e.j)&&ok(e.k))return {type:'H',j:e.j,k:e.k};
+      if(e&&e.type==='V'&&ok(e.r)&&ok(e.i))return {type:'V',r:e.r,i:e.i};
+      fail('bad vial');
+    });
+  };
+  const portList=v=>{
+    if(!Array.isArray(v)||v.length>400)fail('port list is bad');
+    return v.map(s=>typeof s==='string'&&/^(top|bottom|left|right):\d+(\.\d+)?$/.test(s)?s:fail('bad port'));
+  };
   return {
     cols,rows,
     active:grid(l.active,rows,cols,'active',bool),
@@ -43,6 +56,9 @@ export function cleanLayout(l,G){
     sensors:cellList(l.sensors,'sensors'),
     pillars:cellList(l.pillars,'pillars'),
     frost:cellList(l.frost,'frost'),
+    reservoirs:cellList(l.reservoirs,'reservoirs'),
+    vials:edgeList(l.vials),
+    portsUsed:portList(l.portsUsed),
     merges:l.merges.map(m=>{
       if(!m||!Array.isArray(m.cells)||m.cells.length<2||m.cells.length>cols*rows*2)fail('bad chamber group');
       return {cells:m.cells.map(cell),brood:m.brood===true};

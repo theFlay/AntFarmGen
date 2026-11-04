@@ -2,7 +2,7 @@
 // Every part is {name,w,h,poly,holes,qty}, drawn with its top-left at 0,0.
 import {rectPts} from './util.js';
 import {doorType} from './doors.js';
-import {heatDepth} from './heat.js';
+import {heatDepth,heatFrameLayers,borderRow} from './heat.js';
 
 export const PEG_FIT=0.1;
 
@@ -23,7 +23,7 @@ export function keyPart(){
 // Panel joiner: a clip whose two legs drop through joiner slots in neighbouring panels.
 export const JOIN_LEG=8;
 export function joinerPart(G,P){
-  const stack=2*P.S+G.depth+heatDepth(G,P),leg=JOIN_LEG,hb=P.B/2,w=2*hb+leg,bar=4,end=bar+stack+2.7+2,y=bar+stack,kw=G.t+0.2,kh=2.7;
+  const stack=2*P.S+G.depth+heatDepth(G,P),leg=JOIN_LEG,hb=borderRow(P),w=2*hb+leg,bar=4,end=bar+stack+2.7+2,y=bar+stack,kw=G.t+0.2,kh=2.7;
   const hole=x=>rectPts(x-kw/2,y,x+kw/2,y+kh);
   return {name:'panel joiner',w,h:end,
     poly:[[0,0],[w,0],[w,end],[w-leg,end],[w-leg,bar],[leg,bar],[leg,end],[0,end]],
@@ -37,7 +37,7 @@ export function plugPart(G,P){
     poly:[[0,0],[head,0],[head,headH],[head-e,headH],[head-e,L],[e,L],[e,headH],[0,headH]],
     holes:[rectPts(cx-pw/2,cy-ph/2,cx+pw/2,cy+ph/2)]};
 }
-export function plugPinPart(G){return {name:'plug pin',w:G.depth,h:2,poly:rectPts(0,0,G.depth,2),holes:[]};}
+export function plugPinPart(G,P){const l=G.depth-heatFrameLayers(P)*G.t;return {name:'plug pin',w:l,h:2,poly:rectPts(0,0,l,2),holes:[]};}
 
 // Cover leg: tab up into the cover, tab down into a border socket.
 export function coverLeg(G,P,geo){
@@ -68,8 +68,15 @@ export function hardwareParts(G,L,P,geo){
   if(nj)out.push(Object.assign(joinerPart(G,P),{qty:nj}));
   const nk=(P.fastener==='peg'?nf:0)+2*nj;
   if(nk)out.push(Object.assign(keyPart(),{qty:nk}));
-  const nPorts=geo.ports.filter(p=>p.cut).length;
-  if(nPorts){out.push(Object.assign(plugPart(G,P),{qty:nPorts*P.layers}),Object.assign(plugPinPart(G),{qty:nPorts}));}
+  const nPorts=geo.ports.filter(p=>p.cut&&!p.used).length;
+  if(nPorts){out.push(Object.assign(plugPart(G,P),{qty:nPorts*(P.layers-heatFrameLayers(P))}),Object.assign(plugPinPart(G,P),{qty:nPorts}));}
+  if(geo.vials.length){
+    const n=geo.vials.length,off=geo.vials[0].off,L=2*off+10,Wd=P.vialD+8,sw=4.2,st=G.t+0.2,cx=L/2,cy=Wd/2;
+    const slot=x=>rectPts(x-sw/2,cy-st/2,x+sw/2,cy+st/2);
+    out.push({name:'vial ring',w:L,h:Wd,poly:rectPts(0,0,L,Wd),holes:[slot(cx-off),slot(cx+off)],circles:[[cx,cy,P.vialD]],qty:n*P.vialRings});
+    const ph=P.S+P.vialRings*G.t+1;
+    out.push({name:'vial post',w:4,h:ph,poly:rectPts(0,0,4,ph),holes:[],qty:n*2});
+  }
   if(P.coverType==='whole'&&geo.sockets.length)out.push(Object.assign(coverLeg(G,P,geo),{qty:geo.sockets.length}));
   if(geo.sensorBoxes.length){
     const w=P.sensorW-0.2,h=P.sensorH-0.2;

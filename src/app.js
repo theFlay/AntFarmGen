@@ -63,7 +63,9 @@ const TOOLHELP={
   jog:'Tap a solid wall to step it sideways one way, then the other, then back. Needs Angled shapes on.',
   sensor:'Tap a cell to add or remove a sensor pocket. It sits in a corner with two solid walls.',
   pillar:'Tap a cell to add or remove a support pillar.',
-  frost:'Tap a cell to add or remove frosting. Set a sheet to Chosen cells under Frosting.'
+  frost:'Tap a cell to add or remove frosting. Set a sheet to Chosen cells under Frosting.',
+  water:'Flat nests: tap a sponge wall to add a water vial holder. Upright nests: tap the cell above a sponge to make it a water chamber.',
+  port:'Tap a port to mark it in use. Ports not in use get a plug.'
 };
 function snapshot(p=P){history.push(JSON.stringify({L,P:p}));if(history.length>60)history.shift();}
 function regenerate(prev=P){if(L)snapshot(prev);G=derive(P);L=generate(G,P);}
@@ -117,7 +119,24 @@ function setStatus(s){document.getElementById('status').textContent=s;}
 
 /* ---------------- editing ---------------- */
 function onPreviewClick(ev){
-  const el=ev.target.closest('[data-edge],[data-cell]');if(!el)return;
+  const el=ev.target.closest('[data-port],[data-edge],[data-cell]');if(!el)return;
+  if(tool==='port'){
+    if(!el.dataset.port)return;
+    snapshot();
+    const i=L.portsUsed.indexOf(el.dataset.port);
+    if(i>=0)L.portsUsed.splice(i,1);else L.portsUsed.push(el.dataset.port);
+    render();return;
+  }
+  if(tool==='water'&&el.dataset.edge){
+    if(P.orient!=='flat'){setStatus('On an upright nest, tap the cell above a sponge.');return;}
+    const [type,a,b]=el.dataset.edge.split(',');
+    const e=type==='H'?{type,j:+a,k:+b}:{type,r:+a,i:+b};
+    if(getEdge(L,e)!=='sponge'){setStatus('Water vials go on sponge walls.');return;}
+    snapshot();
+    const i=L.vials.findIndex(v=>JSON.stringify(v)===JSON.stringify(e));
+    if(i>=0)L.vials.splice(i,1);else L.vials.push(e);
+    render();return;
+  }
   if(tool==='wall'&&el.dataset.edge){
     const [type,a,b]=el.dataset.edge.split(',');
     const e=type==='H'?{type,j:+a,k:+b}:{type,r:+a,i:+b};
@@ -141,6 +160,19 @@ function onPreviewClick(ev){
     const ch=chambers(L),cham=ch.list[ch.of(r,c,half)];
     const on=!cham.active;
     for(const u of cham.cells)setActive(L,u,on);
+    render();return;
+  }
+  if(tool==='water'){
+    if(P.orient!=='upright'){setStatus('On a flat nest, tap a sponge wall.');return;}
+    if(L.diag[r][c]||mergeOf(L,r,c)>=0){setStatus('A water chamber must be a plain single cell.');return;}
+    snapshot();
+    const i=L.reservoirs.findIndex(u=>u[0]===r&&u[1]===c);
+    if(i>=0){L.reservoirs.splice(i,1);render();return;}
+    L.reservoirs.push([r,c]);
+    for(const e of [{type:'H',j:r,k:c},{type:'H',j:r+1,k:c},{type:'V',r,i:c},{type:'V',r,i:c+1}]){
+      const onGrid=e.type==='H'?e.j>0&&e.j<L.rows:e.i>0&&e.i<L.cols;
+      if(onGrid&&getEdge(L,e)==='tunnel')setEdge(L,e,'solid');
+    }
     render();return;
   }
   if(tool==='sensor'||tool==='pillar'||tool==='frost'){

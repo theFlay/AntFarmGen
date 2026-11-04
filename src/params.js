@@ -56,10 +56,20 @@ export const PARAMS=[
   {k:'wallFinish',l:'Wall strips',d:'clear',opts:[['clear','Clear'],['one','One side'],['both','Both sides']],h:'Both sides needs the sheet flipped once before cutting, and takes much longer.'},
  ]],
  ['Heat channel',false,[
-  {k:'heatChannel',l:'Add a heat channel',d:false,bool:true,h:'Flat nests only. Adds layers under the floor sheet, hidden from view. Always run heat cable from a thermostat: acrylic softens with heat.'},
-  {k:'heatW',l:'Channel width (mm)',d:6,step:0.5,h:'Wider than your cable.'},
-  {k:'heatLayers',l:'Channel layers',d:2,step:1,h:'Channel depth = layers x wall sheet thickness.'},
-  {k:'heatPitch',l:'Channel spacing (mm)',d:40},
+  {k:'heatTop',l:'Heat top border',d:false,bool:true,h:'Border heat works on flat and upright nests. It needs a wider border. Always run heat cable from a thermostat: acrylic softens with heat.'},
+  {k:'heatRight',l:'Heat right border',d:false,bool:true},
+  {k:'heatBottom',l:'Heat bottom border',d:false,bool:true},
+  {k:'heatLeft',l:'Heat left border',d:false,bool:true},
+  {k:'heatEdgeW',l:'Border groove width (mm)',d:4,step:0.5},
+  {k:'heatEdgeLayers',l:'Border groove layers',d:1,step:1,h:'Groove depth = layers x wall sheet thickness. Ports lose this much height.'},
+  {k:'heatChannel',l:'Add a floor channel',d:false,bool:true,h:'Flat nests only. Adds layers under the floor sheet, hidden from view.'},
+  {k:'heatW',l:'Floor channel width (mm)',d:6,step:0.5,h:'Wider than your cable.'},
+  {k:'heatLayers',l:'Floor channel layers',d:2,step:1,h:'Channel depth = layers x wall sheet thickness.'},
+  {k:'heatPitch',l:'Floor channel spacing (mm)',d:40},
+ ]],
+ ['Water',false,[
+  {k:'vialD',l:'Water vial diameter (mm)',d:24,step:0.5,h:'Flat nests: use the Water tool on a sponge wall. A vial holder stands over its fill hole.'},
+  {k:'vialRings',l:'Vial holder rings',d:3,step:1},
  ]],
  ['Sensors and pillars',false,[
   {k:'sensorW',l:'Sensor pocket width (mm)',d:16,step:0.5,h:'Fits a DHT22 (about 15 x 25 x 8mm). Use smaller for an SHT40 board.'},
@@ -81,9 +91,12 @@ export const PARAMS=[
   {k:'angled',l:'Use angled shapes',d:false,bool:true,h:'Off keeps the nest a pure jigsaw. On adds diagonal walls and jogs, whose joints must be sealed with acrylic cement and sand.'},
   {k:'diagShare',l:'Diagonal cells (0 to 1)',d:0.15,step:0.05},
   {k:'jogShare',l:'Jogged walls (0 to 1)',d:0.6,step:0.05,h:'Share of solid walls. Walls with tunnels or sponges stay straight.'},
+  {k:'chamfer',l:'Chamfer sharp corners (mm)',d:0,step:1,h:'0 = none. Cuts off the tight corners of diagonals. Try 14.'},
   {k:'jogSize',l:'Jog size (mm)',d:8,step:0.5,h:'Under 8mm the angled strip has no room for a tab. Under 6mm there are no jogs.'},
  ]],
  ['Export',false,[
+  {k:'bed',l:'Laser bed check',d:'none',opts:[['none','None'],['speedy300','Trotec Speedy 300'],['speedy360','Trotec Speedy 360']]},
+  {k:'exportDxf',l:'Also export DXF',d:false,bool:true,h:'Adds a DXF of each cut file. Engraving stays in the SVG.'},
   {k:'stockW',l:'Wall sheet stock width (mm)',d:600},
   {k:'stockH',l:'Wall sheet stock height (mm)',d:400},
   {k:'cutColor',l:'Cut line colour',d:'#ff0000',color:true},
@@ -91,12 +104,12 @@ export const PARAMS=[
   {k:'engraveIds',l:'Engrave part IDs',d:true,bool:true},
  ]],
 ];
-export const GEN_KEYS=new Set(['broodPillar','seed','brood','oddShare','oddMax','angled','diagShare','jogShare','jogSize','activeCount','growFrom','loops','sponges','dampSide']);
+export const GEN_KEYS=new Set(['chamfer','broodPillar','seed','brood','oddShare','oddMax','angled','diagShare','jogShare','jogSize','activeCount','growFrom','loops','sponges','dampSide']);
 export // sane limits, which also stop a bad value from freezing the page
 const RANGES={W:[60,3000],H:[60,3000],B:[5,100],workerLen:[1,100],queenLen:[1,100],queenWidth:[1,100],pitchFactor:[1,10],tunnelW:[1,100],
   t:[0.5,20],layers:[1,20],S:[0.5,20],tunnelH:[1,200],tabL:[2,100],tabPitch:[5,500],kerf:[0,2],slotClear:[-2,2],doorFit:[0,2],doorGrip:[3,30],
   lipH:[0,30],pegW:[4,30],coverStand:[1,100],portPitch:[0,2000],portOffset:[0,2000],boltD:[1,30],boltSpacing:[10,1000],spongeD:[1,100],
   spongeLen:[1,500],slotW:[0.1,20],fillD:[0.5,50],ventD:[0.1,20],ventGrid:[0,8],seed:[0,1e9],brood:[0,30],oddShare:[0,1],oddMax:[2,12],
-  activeCount:[0,1000],loops:[0,1],sponges:[0,200],stockW:[50,3000],stockH:[50,3000],diagShare:[0,1],jogShare:[0,1],jogSize:[0,50],joinerQty:[0,50],sensorW:[5,80],sensorH:[5,80],heatW:[3,30],heatLayers:[1,10],heatPitch:[15,300]};
+  activeCount:[0,1000],loops:[0,1],sponges:[0,200],stockW:[50,3000],stockH:[50,3000],diagShare:[0,1],jogShare:[0,1],jogSize:[0,50],joinerQty:[0,50],sensorW:[5,80],sensorH:[5,80],heatW:[3,30],heatLayers:[1,10],heatPitch:[15,300],heatEdgeW:[2,15],heatEdgeLayers:[1,6],vialD:[8,80],vialRings:[1,10],chamfer:[0,40]};
 for(const g of PARAMS)for(const f of g[2])if(RANGES[f.k])f.range=RANGES[f.k];
 export const ALL_FIELDS=PARAMS.flatMap(g=>g[2]);

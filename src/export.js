@@ -3,7 +3,8 @@ import {polyD,offsetPoly} from './offset.js';
 import {stripOutline} from './strip.js';
 import {drawTopdown} from './draw.js';
 import {doorType} from './doors.js';
-import {heatDepth} from './heat.js';
+import {heatFrameLayers} from './heat.js';
+import {svgToDxf} from './dxf.js';
 import {hardwareParts,pegPart,keyPart,PEG_FIT,JOIN_LEG} from './hardware.js';
 
 /* ---------------- export ---------------- */
@@ -57,7 +58,7 @@ export function exporters(G,L,P,geo){
     const b=[];
     b.push(d.outline(rectPts(0,0,W,H)));
     for(const s of slots)b.push(d.rect(s));
-    if(G.service===side)for(const s of [...geo.doorSlots,...geo.sensorBoxes])b.push(d.rect(s));
+    if(G.service===side)for(const s of [...geo.doorSlots,...geo.sensorBoxes,...geo.vialSlots])b.push(d.rect(s));
     b.push(...fastenerCuts(G,P,geo,d));
     b.push(...socketCuts(G,geo,d,sockTab));
     if(vents)for(const v of geo.vents)b.push(d.hole(v.x,v.y,P.ventD));
@@ -74,7 +75,15 @@ export function exporters(G,L,P,geo){
     for(const f of geo.frame){b.push(d.outline(f.poly));if(f.hole)b.push(d.cutout(f.hole));}
     b.push(...fastenerCuts(G,P,geo,d));
     b.push(...socketCuts(G,geo,d,sockTab));
-    files.push({name:`frame-layer-cut-x${P.layers}.svg`,data:svgDoc(W,H,b.join('\n'),`Frame layer, cut ${P.layers} times`)});
+    const nFrame=P.layers-heatFrameLayers(P);
+    files.push({name:`frame-layer-cut-x${nFrame}.svg`,data:svgDoc(W,H,b.join('\n'),`Frame layer, cut ${nFrame} times`)});
+    if(geo.edgeHeat){
+      const e=[];
+      for(const f of geo.edgeHeat.pieces){e.push(d.outline(f.poly));if(f.hole)e.push(d.cutout(f.hole));}
+      e.push(...fastenerCuts(G,P,geo,d),...socketCuts(G,geo,d,sockTab));
+      const n=heatFrameLayers(P);
+      files.push({name:`frame-heat-layer-cut-x${n}.svg`,data:svgDoc(W,H,e.join('\n'),`Bottom frame layer with heat groove, cut ${n} times. No port cuts: ports sit above it`)});
+    }
   }
   // cover
   if(P.coverType==='whole'&&geo.sockets.length){
@@ -110,6 +119,7 @@ export function exporters(G,L,P,geo){
   for(const part of kit)for(let n=0;n<part.qty;n++)items.push({w:part.w,h:part.h,draw(x,y){
     const o=[d.outline(part.poly,x,y)];
     for(const h of part.holes)o.push(d.cutout(h,x,y));
+    for(const [cx,cy,dia] of part.circles||[])o.push(d.hole(x+cx,y+cy,dia));
     return o;
   }});
   items.sort((a,b)=>b.w-a.w);
@@ -134,6 +144,10 @@ export function exporters(G,L,P,geo){
   });
   const asm=drawTopdown(G,L,P,geo,null,{labels:true,mm:true});
   files.push({name:'assembly-map.svg',data:`<?xml version="1.0" encoding="UTF-8"?>\n`+asm});
+  if(P.exportDxf)for(const f of files.slice()){
+    if(/frost|assembly/.test(f.name))continue;
+    files.push({name:f.name.replace('.svg','.dxf'),data:svgToDxf(f.data)});
+  }
   return {files,stripSheets:sheets.length,kit};
 }
 

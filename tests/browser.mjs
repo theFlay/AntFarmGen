@@ -100,6 +100,23 @@ await check('frost tool marks cells and makes a floor file',async p=>{
   assert.deepEqual(await p.evaluate(()=>window.__nest.state.L.frost),[[1,1]]);
   assert.ok(await p.$('#exports button:has-text("floor-frost-layer.svg")'));
 });
+await check('port tool marks a port in use and removes its plug',async p=>{
+  const plugs=()=>p.evaluate(()=>{const s=window.__nest.state;return window.__nest.exporters(s.G,s.L,s.P,s.geo).kit.find(k=>k.name==='plug').qty;});
+  const before=await plugs();
+  await p.click('[data-tool="port"]');
+  const key=await p.evaluate(()=>window.__nest.state.geo.ports.find(x=>x.cut).key);
+  await clickSvg(p,`[data-port="${key}"]`);
+  assert.deepEqual(await p.evaluate(()=>window.__nest.state.L.portsUsed),[key]);
+  assert.equal(await plugs(),before-4);
+});
+await check('water tool adds a vial holder on a flat nest',async p=>{
+  await p.click('[data-tool="water"]');
+  const e=await p.evaluate(()=>{const L=window.__nest.state.L;
+    for(let j=1;j<L.rows;j++)for(let k=0;k<L.cols;k++)if(L.H[j][k]==='sponge')return `H,${j},${k}`;
+    for(let r=0;r<L.rows;r++)for(let i=1;i<L.cols;i++)if(L.V[r][i]==='sponge')return `V,${r},${i}`;});
+  await clickSvg(p,`[data-edge="${e}"]`);
+  assert.equal(await p.evaluate(()=>window.__nest.state.geo.vials.length),1);
+});
 await check('export buttons are enabled when rules pass, disabled on an error',async p=>{
   assert.equal(await p.evaluate(()=>window.__nest.state.rules.ok),true);
   assert.equal(await p.$eval('#exports button[data-file="0"]',b=>b.disabled),false);

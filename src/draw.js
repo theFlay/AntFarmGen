@@ -15,6 +15,11 @@ export function drawTopdown(G,L,P,geo,rules,opts){
     const r=sp.orient==='H'?[sp.uc-L2,sp.c-D/2,sp.Ls,D]:[sp.c-D/2,sp.uc-L2,D,sp.Ls];
     o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="#4a90d9"/>`);
   }
+  for(const [r,c] of L.reservoirs)o.push(`<rect x="${fmt(xs[c])}" y="${fmt(ys[r])}" width="${fmt(xs[c+1]-xs[c])}" height="${fmt(ys[r+1]-ys[r])}" fill="#7fb8ea"/>`);
+  if(opts.interactive&&P.dampSide!=='none'&&P.sponges>0){
+    const g={left:'x1="0" x2="1" y1="0" y2="0"',right:'x1="1" x2="0" y1="0" y2="0"',top:'x1="0" x2="0" y1="0" y2="1"',bottom:'x1="0" x2="0" y1="1" y2="0"'}[P.dampSide];
+    if(g)o.push(`<defs><linearGradient id="damp" ${g}><stop offset="0" stop-color="#4a90d9" stop-opacity="0.22"/><stop offset="1" stop-color="#4a90d9" stop-opacity="0"/></linearGradient></defs><rect x="${fmt(P.B)}" y="${fmt(P.B)}" width="${fmt(W-2*P.B)}" height="${fmt(H-2*P.B)}" fill="url(#damp)"/>`);
+  }
   for(const b of geo.sensorBoxes)o.push(`<rect x="${fmt(b.x0)}" y="${fmt(b.y0)}" width="${fmt(b.x1-b.x0)}" height="${fmt(b.y1-b.y0)}" fill="#c9b6e8"/>`);
   if(opts.interactive&&P.floorFinish==='chosen'||opts.interactive&&P.ceilingFinish==='chosen'){
     for(const [r,c] of L.frost)o.push(`<rect x="${fmt(xs[c])}" y="${fmt(ys[r])}" width="${fmt(xs[c+1]-xs[c])}" height="${fmt(ys[r+1]-ys[r])}" fill="#fff" opacity="0.45"/>`);
@@ -40,7 +45,7 @@ export function drawTopdown(G,L,P,geo,rules,opts){
     if(!p.cut){o.push(`<path d="M${fmt(x-2.5)} ${fmt(y-2.5)} L${fmt(x+2.5)} ${fmt(y+2.5)} M${fmt(x+2.5)} ${fmt(y-2.5)} L${fmt(x-2.5)} ${fmt(y+2.5)}" stroke="#e5484d" stroke-width="1.2"/>`);continue;}
     const horiz=p.side==='top'||p.side==='bottom';
     const r=horiz?[p.pos-tw/2,p.side==='top'?0:H-P.B,tw,P.B]:[p.side==='left'?0:W-P.B,p.pos-tw/2,P.B,tw];
-    o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="${p.active?'#2fb37a':'#9aa3a5'}"/>`);
+    o.push(`<rect${opts.tool==='port'?` data-port="${p.key}" style="cursor:pointer"`:''} x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="${p.used?'#1b6fd0':p.active?'#2fb37a':'#9aa3a5'}"/>`);
     if(opts.labels)o.push(`<text x="${fmt(horiz?p.pos:(p.side==='left'?-2:W+2))}" y="${fmt(horiz?(p.side==='top'?-1:H+3.5):p.pos)}" font-size="3" text-anchor="${horiz?'middle':(p.side==='left'?'end':'start')}" fill="#333">${p.id}</text>`);
   }
   for(const b of geo.fasteners){
@@ -57,6 +62,8 @@ export function drawTopdown(G,L,P,geo,rules,opts){
     o.push(`<rect x="${fmt(s.x-hx)}" y="${fmt(s.y-hy)}" width="${fmt(2*hx)}" height="${fmt(2*hy)}" fill="#f3b0b2" stroke="#b33" stroke-width="0.3"/>`);
   }
   if(geo.heat)o.push(`<path d="M${geo.heat.path.map(v=>fmt(v[0])+' '+fmt(v[1])).join(' L')}" fill="none" stroke="#e5484d" stroke-opacity="0.55" stroke-width="${fmt(P.heatW*0.6)}" stroke-dasharray="${fmt(P.heatW)} ${fmt(P.heatW)}"/>`);
+  if(geo.edgeHeat)for(const p of geo.edgeHeat.paths)o.push(`<path d="M${p.map(v=>fmt(v[0])+' '+fmt(v[1])).join(' L')}" fill="none" stroke="#e5484d" stroke-opacity="0.7" stroke-width="${fmt(P.heatEdgeW*0.6)}" stroke-dasharray="4 3"/>`);
+  for(const v of geo.vials)o.push(`<circle cx="${fmt(v.x)}" cy="${fmt(v.y)}" r="${fmt(P.vialD/2)}" fill="#4a90d9" fill-opacity="0.18" stroke="#2f6fb0" stroke-width="0.6"/>`);
   // closed doors
   for(const d of geo.doors){
     if(!d.closed)continue;
@@ -85,7 +92,13 @@ export function drawTopdown(G,L,P,geo,rules,opts){
   if(opts.interactive){
     // hit areas
     for(const u of units)o.push(`<path data-cell="${u.slice(0,3).filter(v=>v!==undefined).join(',')}" d="${polyD(unitPoly(G,u))}" fill="transparent"/>`);
-    if(opts.tool==='wall'||opts.tool==='jog'){
+    if(opts.tool==='port')for(const p of geo.ports){
+      if(!p.cut)continue;
+      const horiz=p.side==='top'||p.side==='bottom',tw2=G.tunnelW;
+      const r=horiz?[p.pos-tw2/2,p.side==='top'?0:H-P.B,tw2,P.B]:[p.side==='left'?0:W-P.B,p.pos-tw2/2,P.B,tw2];
+      o.push(`<rect data-port="${p.key}" x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="transparent" style="cursor:pointer"/>`);
+    }
+    if(opts.tool==='wall'||opts.tool==='jog'||opts.tool==='water'){
       const hw=Math.max(4,t*2);
       for(let j=1;j<rows;j++)for(let k=0;k<cols;k++){if(stH(L,j,k)==='none')continue;
         o.push(`<rect data-edge="H,${j},${k}" x="${fmt(xs[k]+t)}" y="${fmt(ys[j]-hw)}" width="${fmt(xs[k+1]-xs[k]-2*t)}" height="${fmt(2*hw)}" fill="transparent" style="cursor:pointer"/>`);}
