@@ -6,7 +6,7 @@ Use it at [theflay.github.io/AntFarmGen](https://theflay.github.io/AntFarmGen/),
 
 Ideas and bug reports are welcome in [Issues](https://github.com/theFlay/AntFarmGen/issues/new/choose), and chat is in [Discussions](https://github.com/theFlay/AntFarmGen/discussions).
 
-This repo is public: see [SECURITY.md](SECURITY.md). Pushes to `develop` publish the committed `index.html`, so run `npm test` before pushing.
+This repo is public: see [SECURITY.md](SECURITY.md). Every push to `develop` is tested, and it only goes live if the tests pass.
 
 ## Licence
 

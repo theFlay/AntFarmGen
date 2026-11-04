@@ -119,6 +119,13 @@ test('frosted floors add an engrave-only file',()=>{
   assert.ok(f);assert.match(f.data,/fill="#000000"/);assert.doesNotMatch(f.data,/stroke="#ff0000"/);
   assert.ok(!files(run({},1)).some(x=>/frost/.test(x.name)));
 });
+test('upright nests get a saddle for every door, like flat nests',()=>{
+  for(const orient of ['flat','upright']){
+    const r=run({orient},2);
+    const saddle=hardwareParts(r.G,r.L,r.P,r.geo).find(p=>p.name==='saddle');
+    assert.equal(saddle.qty,r.geo.doors.length);
+  }
+});
 test('upright nests get sand lips on floor tunnels only, and feet',()=>{
   const r=run({orient:'upright'},4);
   const lips=r.geo.pieces.filter(p=>p.kind==='lip');
