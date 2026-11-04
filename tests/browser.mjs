@@ -86,6 +86,20 @@ await check('sensor and pillar tools add and remove, and the status pill reacts'
   await setField(p,'p_tunnelH',11.5);
   assert.match(await p.$eval('#pill',e=>e.textContent),/problem/);
 });
+await check('heat channel appears in the preview and the file list',async p=>{
+  await p.$eval('#p_heatChannel',e=>{e.checked=true;e.dispatchEvent(new Event('change'));});
+  assert.ok(await p.evaluate(()=>!!window.__nest.state.geo.heat));
+  assert.ok(await p.$('#exports button:has-text("heat-base-sheet.svg")'));
+  await p.$eval('#p_orient',e=>{e.value='upright';e.dispatchEvent(new Event('change'));});
+  assert.equal(await p.$('#exports button:has-text("heat-base-sheet.svg")'),null);
+});
+await check('frost tool marks cells and makes a floor file',async p=>{
+  await p.$eval('#p_floorFinish',e=>{e.value='chosen';e.dispatchEvent(new Event('change'));});
+  await p.click('[data-tool="frost"]');
+  await clickSvg(p,'[data-cell="1,1"]');
+  assert.deepEqual(await p.evaluate(()=>window.__nest.state.L.frost),[[1,1]]);
+  assert.ok(await p.$('#exports button:has-text("floor-frost-layer.svg")'));
+});
 await check('export buttons are enabled when rules pass, disabled on an error',async p=>{
   assert.equal(await p.evaluate(()=>window.__nest.state.rules.ok),true);
   assert.equal(await p.$eval('#exports button[data-file="0"]',b=>b.disabled),false);

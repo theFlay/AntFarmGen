@@ -2,12 +2,13 @@
 // Every part is {name,w,h,poly,holes,qty}, drawn with its top-left at 0,0.
 import {rectPts} from './util.js';
 import {doorType} from './doors.js';
+import {heatDepth} from './heat.js';
 
 export const PEG_FIT=0.1;
 
 // Peg: head on the back, shank through everything, key slot just past the front sheet.
 export function pegPart(G,P){
-  const pw=P.pegW,head=pw+6,headH=3,shank=2*P.S+G.depth,keyH=2.7,rim=2;
+  const pw=P.pegW,head=pw+6,headH=3,shank=2*P.S+G.depth+heatDepth(G,P),keyH=2.7,rim=2;
   const e=(head-pw)/2,total=headH+shank+keyH+rim;
   const hw=G.t+0.2,cx=head/2,y=headH+shank;
   return {name:'peg',w:head,h:total,
@@ -22,7 +23,7 @@ export function keyPart(){
 // Panel joiner: a clip whose two legs drop through joiner slots in neighbouring panels.
 export const JOIN_LEG=8;
 export function joinerPart(G,P){
-  const leg=JOIN_LEG,hb=P.B/2,w=2*hb+leg,bar=4,end=bar+2*P.S+G.depth+2.7+2,y=bar+2*P.S+G.depth,kw=G.t+0.2,kh=2.7;
+  const stack=2*P.S+G.depth+heatDepth(G,P),leg=JOIN_LEG,hb=P.B/2,w=2*hb+leg,bar=4,end=bar+stack+2.7+2,y=bar+stack,kw=G.t+0.2,kh=2.7;
   const hole=x=>rectPts(x-kw/2,y,x+kw/2,y+kh);
   return {name:'panel joiner',w,h:end,
     poly:[[0,0],[w,0],[w,end],[w-leg,end],[w-leg,bar],[leg,bar],[leg,end],[0,end]],

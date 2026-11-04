@@ -16,6 +16,9 @@ export function drawTopdown(G,L,P,geo,rules,opts){
     o.push(`<rect x="${fmt(r[0])}" y="${fmt(r[1])}" width="${fmt(r[2])}" height="${fmt(r[3])}" fill="#4a90d9"/>`);
   }
   for(const b of geo.sensorBoxes)o.push(`<rect x="${fmt(b.x0)}" y="${fmt(b.y0)}" width="${fmt(b.x1-b.x0)}" height="${fmt(b.y1-b.y0)}" fill="#c9b6e8"/>`);
+  if(opts.interactive&&P.floorFinish==='chosen'||opts.interactive&&P.ceilingFinish==='chosen'){
+    for(const [r,c] of L.frost)o.push(`<rect x="${fmt(xs[c])}" y="${fmt(ys[r])}" width="${fmt(xs[c+1]-xs[c])}" height="${fmt(ys[r+1]-ys[r])}" fill="#fff" opacity="0.45"/>`);
+  }
   for(const f of geo.frame){
     o.push(`<path d="${polyD(f.poly)}${f.hole?' '+polyD(f.hole):''}" fill="#b9c3c6" fill-rule="evenodd" stroke="#7d898c" stroke-width="0.4"/>`);
   }
@@ -53,6 +56,7 @@ export function drawTopdown(G,L,P,geo,rules,opts){
     const hl=(geo.socketL-4)/2,hx=s.along==='x'?hl:t/2,hy=s.along==='x'?t/2:hl;
     o.push(`<rect x="${fmt(s.x-hx)}" y="${fmt(s.y-hy)}" width="${fmt(2*hx)}" height="${fmt(2*hy)}" fill="#f3b0b2" stroke="#b33" stroke-width="0.3"/>`);
   }
+  if(geo.heat)o.push(`<path d="M${geo.heat.path.map(v=>fmt(v[0])+' '+fmt(v[1])).join(' L')}" fill="none" stroke="#e5484d" stroke-opacity="0.55" stroke-width="${fmt(P.heatW*0.6)}" stroke-dasharray="${fmt(P.heatW)} ${fmt(P.heatW)}"/>`);
   // closed doors
   for(const d of geo.doors){
     if(!d.closed)continue;

@@ -7,7 +7,7 @@
  jogH/jogV: sideways step in mm on a solid wall, 0 for none.
 */
 export function emptyLayout(cols,rows){
-  const L={cols,rows,active:[],activeB:[],merges:[],H:[],V:[],diag:[],jogH:[],jogV:[],sensors:[],pillars:[]};
+  const L={cols,rows,active:[],activeB:[],merges:[],H:[],V:[],diag:[],jogH:[],jogV:[],sensors:[],pillars:[],frost:[]};
   for(let r=0;r<rows;r++){
     L.active.push(new Array(cols).fill(true));L.activeB.push(new Array(cols).fill(true));
     L.diag.push(new Array(cols).fill(0));
@@ -36,7 +36,7 @@ export function setActive(L,[r,c,h],on){
 export function normalizeLayout(L){
   L.merges=L.merges.map(m=>m.cells?m:{cells:broodCells(m.r,m.c),brood:true});
   const fresh=emptyLayout(L.cols,L.rows);
-  for(const k of ['diag','jogH','jogV','sensors','pillars'])if(!L[k])L[k]=fresh[k];
+  for(const k of ['diag','jogH','jogV','sensors','pillars','frost'])if(!L[k])L[k]=fresh[k];
   if(!L.activeB)L.activeB=L.active.map(row=>row.slice());
   return L;
 }

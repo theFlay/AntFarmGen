@@ -1,6 +1,7 @@
 import {f1,rectPts,polysOverlap} from './util.js';
 import {stH,stV,chambers,chamberCenter,unitCenter,interiorEdges,getEdge} from './layout.js';
 import {doorType} from './doors.js';
+import {heatOn,heatEntry,heatLayer} from './heat.js';
 import {spongeLength} from './generate.js';
 /* ---------------- geometry ---------------- */
 // Tabs go in the solid runs either side of each tunnel notch, leaving room for a door slot.
@@ -277,14 +278,17 @@ export function buildGeometry(G,L,P){
     }
   }
   const jointNear=(side,pos,r)=>joints.some(j=>j.side===side&&Math.abs(j.pos-pos)<r+t/2+2);
-  const portNear=(side,pos)=>ports.some(p=>p.cut&&p.side===side&&Math.abs(p.pos-pos)<w/2+fastD/2+1.5)||jointNear(side,pos,fastD/2);
+  const heat=heatOn(P)?heatLayer(P):null;
+  const heatNear=(side,pos)=>heat&&(side==='left'||side==='right')&&Math.abs(pos-heatEntry(P))<P.heatW/2+fastD/2+2;
+  const portNear=(side,pos)=>ports.some(p=>p.cut&&p.side===side&&Math.abs(p.pos-pos)<w/2+fastD/2+1.5)||jointNear(side,pos,fastD/2)||heatNear(side,pos);
   for(const [x,y] of [[hb,hb],[W-hb,hb],[W-hb,H-hb],[hb,H-hb]])bolts.push({x,y,along:'x'});
   for(const [side,len] of [['top',W],['bottom',W],['left',H],['right',H]]){
     const span=len-2*hb;const n=Math.max(1,Math.ceil(span/Math.max(10,P.boltSpacing)));
     for(let m=1;m<n;m++){
       let pos=hb+span*m/n;
       if(portNear(side,pos)){
-        const alt=[pos-(w/2+fastD/2+3),pos+(w/2+fastD/2+3)].find(a=>!portNear(side,a));
+        const step=Math.max(w,heat?P.heatW:0)/2+fastD/2+3;
+        const alt=[pos-step,pos+step].find(a=>!portNear(side,a));
         if(alt===undefined)continue;pos=alt;
       }
       if(side==='top')bolts.push({x:pos,y:hb,along:'x'});else if(side==='bottom')bolts.push({x:pos,y:H-hb,along:'x'});
@@ -294,6 +298,7 @@ export function buildGeometry(G,L,P){
   if(P.fastener==='bolt'&&P.boltD>B-4)errors.push(`Bolt holes (${P.boltD}mm) are too big for a ${B}mm border.`);
   if(P.fastener==='peg'&&t+2>B-4)errors.push(`Peg slots are too wide for a ${B}mm border.`);
   const fasteners=P.fastener==='cement'?[]:bolts;
+  if(P.heatChannel&&!heat)warnings.push('The heat channel is for flat nests only, so it is left out.');
   // cover sockets: through slots in the border, so a cover fits either face
   const socketL=14,sockets=[];
   if(P.coverType==='whole'){
@@ -364,7 +369,7 @@ export function buildGeometry(G,L,P){
     const dx=Math.max(p.x0-q.x1,q.x0-p.x1,0),dy=Math.max(p.y0-q.y1,q.y0-p.y1,0);
     minWeb=Math.min(minWeb,Math.hypot(dx,dy));
   }
-  return {pieces,sponges,fills,slotsFront,slotsBack,doors,doorSlots,ports,frame,fasteners,sockets,socketL,joints,sensorBoxes,vents,minWeb,errors,warnings,ch};
+  return {pieces,sponges,fills,slotsFront,slotsBack,doors,doorSlots,ports,frame,fasteners,sockets,socketL,joints,sensorBoxes,heat,vents,minWeb,errors,warnings,ch};
 }
 
 export function framePieces(W,H,B,cuts,w){

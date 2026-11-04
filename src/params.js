@@ -9,7 +9,6 @@ export const PARAMS=[
   {k:'doorType',l:'Door type',d:'slide',opts:[['slide','A: sliding door'],['none','None (open tunnels)']]},
   {k:'fastener',l:'Hold together with',d:'peg',opts:[['peg','Acrylic pegs and keys'],['bolt','Bolts'],['cement','Cement only']]},
   {k:'coverType',l:'Red cover',d:'whole',opts:[['whole','Whole panel'],['none','None']]},
-  {k:'floorFinish',l:'Floor sheet finish',d:'clear',opts:[['clear','Clear'],['frosted','Frosted (for sand)']],h:'Frosted adds an engrave file for the inside of the floor or back sheet. Engrave it before cutting.'},
   {k:'joinSlots',l:'Slots for joining panels',d:true,bool:true,h:'Cut on a fixed grid, so any two panels line up.'},
   {k:'joinerQty',l:'Panel joiners to cut',d:0,step:1,h:'Clips that hold two panels together. Each one uses 2 keys.'},
  ]],
@@ -51,6 +50,17 @@ export const PARAMS=[
   {k:'ventD',l:'Air vent hole diameter (mm)',d:1,step:0.1},
   {k:'ventGrid',l:'Air vents per chamber (n x n)',d:3,step:1},
  ]],
+ ['Frosting',false,[
+  {k:'floorFinish',l:'Floor or back sheet',d:'clear',opts:[['clear','Clear'],['frosted','Frosted'],['chosen','Chosen cells']],h:'Helps glue and sand stick. Chosen cells uses the Frost tool.'},
+  {k:'ceilingFinish',l:'Top or front sheet',d:'clear',opts:[['clear','Clear'],['frosted','Frosted'],['chosen','Chosen cells']],h:'This blurs the view into the nest.'},
+  {k:'wallFinish',l:'Wall strips',d:'clear',opts:[['clear','Clear'],['one','One side'],['both','Both sides']],h:'Both sides needs the sheet flipped once before cutting, and takes much longer.'},
+ ]],
+ ['Heat channel',false,[
+  {k:'heatChannel',l:'Add a heat channel',d:false,bool:true,h:'Flat nests only. Adds layers under the floor sheet, hidden from view. Always run heat cable from a thermostat: acrylic softens with heat.'},
+  {k:'heatW',l:'Channel width (mm)',d:6,step:0.5,h:'Wider than your cable.'},
+  {k:'heatLayers',l:'Channel layers',d:2,step:1,h:'Channel depth = layers x wall sheet thickness.'},
+  {k:'heatPitch',l:'Channel spacing (mm)',d:40},
+ ]],
  ['Sensors and pillars',false,[
   {k:'sensorW',l:'Sensor pocket width (mm)',d:16,step:0.5,h:'Fits a DHT22 (about 15 x 25 x 8mm). Use smaller for an SHT40 board.'},
   {k:'sensorH',l:'Sensor pocket length (mm)',d:26,step:0.5},
@@ -87,6 +97,6 @@ const RANGES={W:[60,3000],H:[60,3000],B:[5,100],workerLen:[1,100],queenLen:[1,10
   t:[0.5,20],layers:[1,20],S:[0.5,20],tunnelH:[1,200],tabL:[2,100],tabPitch:[5,500],kerf:[0,2],slotClear:[-2,2],doorFit:[0,2],doorGrip:[3,30],
   lipH:[0,30],pegW:[4,30],coverStand:[1,100],portPitch:[0,2000],portOffset:[0,2000],boltD:[1,30],boltSpacing:[10,1000],spongeD:[1,100],
   spongeLen:[1,500],slotW:[0.1,20],fillD:[0.5,50],ventD:[0.1,20],ventGrid:[0,8],seed:[0,1e9],brood:[0,30],oddShare:[0,1],oddMax:[2,12],
-  activeCount:[0,1000],loops:[0,1],sponges:[0,200],stockW:[50,3000],stockH:[50,3000],diagShare:[0,1],jogShare:[0,1],jogSize:[0,50],joinerQty:[0,50],sensorW:[5,80],sensorH:[5,80]};
+  activeCount:[0,1000],loops:[0,1],sponges:[0,200],stockW:[50,3000],stockH:[50,3000],diagShare:[0,1],jogShare:[0,1],jogSize:[0,50],joinerQty:[0,50],sensorW:[5,80],sensorH:[5,80],heatW:[3,30],heatLayers:[1,10],heatPitch:[15,300]};
 for(const g of PARAMS)for(const f of g[2])if(RANGES[f.k])f.range=RANGES[f.k];
 export const ALL_FIELDS=PARAMS.flatMap(g=>g[2]);

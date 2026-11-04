@@ -62,7 +62,8 @@ const TOOLHELP={
   diag:'Tap a cell to cycle no diagonal, / and \\. Each half joins a neighbouring chamber. Needs Angled shapes on.',
   jog:'Tap a solid wall to step it sideways one way, then the other, then back. Needs Angled shapes on.',
   sensor:'Tap a cell to add or remove a sensor pocket. It sits in a corner with two solid walls.',
-  pillar:'Tap a cell to add or remove a support pillar.'
+  pillar:'Tap a cell to add or remove a support pillar.',
+  frost:'Tap a cell to add or remove frosting. Set a sheet to Chosen cells under Frosting.'
 };
 function snapshot(p=P){history.push(JSON.stringify({L,P:p}));if(history.length>60)history.shift();}
 function regenerate(prev=P){if(L)snapshot(prev);G=derive(P);L=generate(G,P);}
@@ -142,8 +143,8 @@ function onPreviewClick(ev){
     for(const u of cham.cells)setActive(L,u,on);
     render();return;
   }
-  if(tool==='sensor'||tool==='pillar'){
-    const list=tool==='sensor'?L.sensors:L.pillars;
+  if(tool==='sensor'||tool==='pillar'||tool==='frost'){
+    const list=tool==='sensor'?L.sensors:tool==='pillar'?L.pillars:L.frost;
     snapshot();
     const i=list.findIndex(u=>u[0]===r&&u[1]===c);
     if(i>=0)list.splice(i,1);else list.push([r,c]);

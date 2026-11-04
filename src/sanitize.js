@@ -42,6 +42,7 @@ export function cleanLayout(l,G){
     jogV:grid(l.jogV,rows,cols+1,'jogV',jog),
     sensors:cellList(l.sensors,'sensors'),
     pillars:cellList(l.pillars,'pillars'),
+    frost:cellList(l.frost,'frost'),
     merges:l.merges.map(m=>{
       if(!m||!Array.isArray(m.cells)||m.cells.length<2||m.cells.length>cols*rows*2)fail('bad chamber group');
       return {cells:m.cells.map(cell),brood:m.brood===true};

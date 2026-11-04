@@ -62,8 +62,10 @@ export function checkRules(G,L,P,geo){
   const noTabs=geo.pieces.filter(pc=>pc.notches.length&&!pc.top.length).length;
   if(noTabs)msgs.push(['warn',`${noTabs} tunnel strip(s) are too short for tabs. Shorten the tab length or glue them.`]);
   if(geo.minWeb<1)msgs.push(['warn',`Two cuts in a sheet are only ${geo.minWeb.toFixed(2)}mm apart and may crack.`]);
+  if(geo.heat)msgs.push(['info','Heat channel added. Always run the cable from a thermostat, and keep it well below the point where acrylic softens. Keep part of the nest unheated so the ants can choose.']);
   const shortA=geo.pieces.filter(p=>p.kind==='angle'&&!p.top.length).length;
   if(shortA)msgs.push(['warn',`${shortA} angled strip(s) are too short for tabs and rely on glue alone. A larger jog size fixes this.`]);
+  if(P.ceilingFinish==='frosted')msgs.push(['info','A frosted top or front sheet blurs the view into the nest.']);
   const nAngle=geo.pieces.filter(p=>p.kind==='angle').length;
   if(nAngle)msgs.push(['info',`${nAngle} angled strip(s). Their joints leave small wedge gaps: seal them with thickened acrylic cement, then sand, and let it cure fully before ants go in.`]);
   for(const e of geo.errors)msgs.push(['error',e]);

@@ -3,6 +3,7 @@ import {polyD,offsetPoly} from './offset.js';
 import {stripOutline} from './strip.js';
 import {drawTopdown} from './draw.js';
 import {doorType} from './doors.js';
+import {heatDepth} from './heat.js';
 import {hardwareParts,pegPart,keyPart,PEG_FIT,JOIN_LEG} from './hardware.js';
 
 /* ---------------- export ---------------- */
@@ -80,13 +81,23 @@ export function exporters(G,L,P,geo){
     const b=[d.outline(rectPts(0,0,W,H)),...geo.sockets.map(o=>d.rect(borderSlot(o,sockTab,G.t,PEG_FIT)))];
     files.push({name:'cover-sheet.svg',data:svgDoc(W,H,b.join('\n'),'Cover sheet (red acrylic)')});
   }
-  // frosting is its own engrave file, so it never mixes with the cuts
-  if(P.floorFinish==='frosted'){
-    const body=`<path d="${polyD(rectPts(P.B,P.B,W-P.B,H-P.B))}" fill="${P.engraveColor}" stroke="none"/>`;
-    files.push({name:'floor-frost-layer.svg',data:svgDoc(W,H,body,'Frost the inside of the floor or back sheet, before cutting')});
+  // heat layers sit under the floor sheet, so they only need the fasteners and joiner slots
+  if(geo.heat){
+    const ties=[...fastenerCuts(G,P,geo,d),...geo.joints.map(o=>d.rect(borderSlot(o,JOIN_LEG,G.t,PEG_FIT)))];
+    const body=[...geo.heat.pieces.map(p=>d.outline(p)),...ties];
+    files.push({name:`heat-layer-cut-x${P.heatLayers}.svg`,data:svgDoc(W,H,body.join('\n'),`Heat channel layer, cut ${P.heatLayers} times from the wall sheet`)});
+    files.push({name:'heat-base-sheet.svg',data:svgDoc(W,H,[d.outline(rectPts(0,0,W,H)),...ties].join('\n'),'Heat channel base sheet')});
   }
+  // frosting is its own engrave file, so it never mixes with the cuts
+  const frostPath=pts=>`<path d="${polyD(pts)}" fill="${P.engraveColor}" stroke="none"/>`;
+  const frostAreas=mode=>mode==='frosted'?[rectPts(P.B,P.B,W-P.B,H-P.B)]
+    :mode==='chosen'?L.frost.map(([r,c])=>rectPts(G.xs[c],G.ys[r],G.xs[c+1],G.ys[r+1])):[];
+  const floor=frostAreas(P.floorFinish),ceiling=frostAreas(P.ceilingFinish);
+  if(floor.length)files.push({name:'floor-frost-layer.svg',data:svgDoc(W,H,floor.map(frostPath).join('\n'),'Frost the inside of the floor or back sheet, in the same position, before cutting')});
+  // the top sheet is frosted on its inside face, so this file is mirrored for the sheet turned over
+  if(ceiling.length)files.push({name:'ceiling-frost-layer.svg',data:svgDoc(W,H,ceiling.map(p=>frostPath(p.map(([x,y])=>[W-x,y]))).join('\n'),'Frost the inside of the top or front sheet: turn the sheet over, in the same position, before cutting')});
   // everything cut from the wall sheet, shelf-packed onto stock sheets
-  const items=geo.pieces.map(pc=>({w:pc.e-pc.s,h:G.depth+2*P.S,draw(x,y){
+  const items=geo.pieces.map(pc=>({w:pc.e-pc.s,h:G.depth+2*P.S,frost:pc.kind==='wall'||pc.kind==='angle',draw(x,y){
     const ty=y+P.S,o=[d.outline(stripOutline(pc,G,P),x,ty)];
     for(const [a0,a1] of pc.windows)o.push(d.cutout(rectPts(a0,2,a1,G.depth-2),x,ty));
     if(P.engraveIds&&(pc.kind==='wall'||pc.kind==='angle')&&this.w>=14){
@@ -115,6 +126,11 @@ export function exporters(G,L,P,geo){
     const b=[];
     for(const {it,x,y} of sh)b.push(...it.draw(x,y));
     files.push({name:`parts-sheet-${i+1}.svg`,data:svgDoc(P.stockW,P.stockH,b.join('\n'),`Wall sheet parts, sheet ${i+1} of ${sheets.length}`)});
+    if(P.wallFinish==='one'||P.wallFinish==='both'){
+      const faces=sh.filter(s=>s.it.frost).map(({it,x,y})=>rectPts(x,y+P.S,x+it.w,y+P.S+G.depth));
+      files.push({name:`parts-frost-${i+1}.svg`,data:svgDoc(P.stockW,P.stockH,faces.map(frostPath).join('\n'),`Frost wall strips on sheet ${i+1}, before cutting, in the same position`)});
+      if(P.wallFinish==='both')files.push({name:`parts-frost-${i+1}-side-b.svg`,data:svgDoc(P.stockW,P.stockH,faces.map(p=>frostPath(p.map(([x,y])=>[P.stockW-x,y]))).join('\n'),`Second side: turn the sheet over left to right, back into the same corner, then frost. Stock must be exactly ${P.stockW}mm wide`)});
+    }
   });
   const asm=drawTopdown(G,L,P,geo,null,{labels:true,mm:true});
   files.push({name:'assembly-map.svg',data:`<?xml version="1.0" encoding="UTF-8"?>\n`+asm});
