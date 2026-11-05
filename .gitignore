@@ -14,3 +14,6 @@ tests/*.png
 *.pfx
 secrets*
 credentials*
+
+# Local desktop shortcuts for Claude sessions
+launchers/
