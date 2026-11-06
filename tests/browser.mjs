@@ -134,6 +134,23 @@ await check('rack mode shows a rack, reacts to settings and exports a zip',async
   assert.equal(await p.isVisible('#preview'),true);
   assert.match(await p.$eval('#pill',e=>e.textContent),/Ready/);
 });
+await check('outworld mode builds a box, docks onto the nest and exports a zip',async p=>{
+  await p.click('[data-mode="outworld"]');
+  assert.equal(await p.isVisible('#preview'),false);
+  assert.equal(await p.evaluate(()=>window.__nest.outworld.parts.length),5);
+  assert.match(await p.$eval('#outChecks',e=>e.textContent),/Docks fit nest port/);
+  await p.selectOption('#o_connect','direct');
+  await p.selectOption('#o_lid','slide');
+  assert.ok(await p.evaluate(()=>window.__nest.outworld.conn.some(c=>c.name==='dock bar')));
+  assert.ok(await p.$('#outExports button:has-text("outworld-connectors.svg")'));
+  const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#outZip')]);
+  assert.match(dl.suggestedFilename(),/^outworld-250x150x80\.zip$/);
+  await p.fill('#o_owW','60');await p.dispatchEvent('#o_owW','change');
+  assert.equal(await p.$eval('#outZip',b=>b.disabled),true);
+  assert.match(await p.$eval('#pill',e=>e.textContent),/Fix/);
+  const [t]=await Promise.all([p.waitForEvent('download'),p.click('#outTest')]);
+  assert.equal(t.suggestedFilename(),'tube-hole-test.svg');
+});
 await check('typing a value then clicking download straight away is not lost',async p=>{
   await p.locator('summary:has-text("Auto layout")').scrollIntoViewIfNeeded();
   await p.fill('#p_seed','77');
@@ -231,6 +248,29 @@ await check('old layout files keep the bolt hole they were saved with',async p=>
   await p.waitForTimeout(300);
   assert.equal(await p.evaluate(()=>window.__nest.state.P.boltSize),'custom');
   assert.equal(await p.$eval('#preview circle[fill="#fff"]',e=>e.getAttribute('r')),'3.05');
+});
+await check('a part set to 3D print becomes an STL in the zip, and a too-big print blocks export',async p=>{
+  await p.locator('summary:has-text("Machines and materials")').click();
+  await p.selectOption('#p_m_peg','print');
+  const btn=p.locator('#exports button',{hasText:/^print-peg-x\d+\.stl$/});
+  assert.equal(await btn.count(),1);
+  const [dl]=await Promise.all([p.waitForEvent('download'),btn.click()]);
+  assert.match(dl.suggestedFilename(),/\.stl$/);
+  const head=await (await import('node:fs')).promises.readFile(await dl.path());
+  assert.equal(head.length,84+50*head.readUInt32LE(80));
+  await p.selectOption('#p_m_front','print');
+  assert.match(await p.$eval('#checks',e=>e.textContent),/too big for the 220 x 220 x 250mm print area/);
+  assert.equal(await p.$eval('#zipAll',b=>b.disabled),true);
+});
+await check('an upright nest docks onto the outworld with edge clips',async p=>{
+  await p.selectOption('#p_orient','upright');
+  await p.click('[data-mode="outworld"]');
+  await p.selectOption('#o_connect','direct');
+  assert.equal(await p.evaluate(()=>window.__nest.outworld.conn.filter(c=>c.name==='edge clip').length),2);
+  assert.match(await p.$eval('#outChecks',e=>e.textContent),/Docks onto P\d+/);
+  await p.locator('#outControls summary:has-text("Materials")').click();
+  await p.selectOption('#o_m_clip','print');
+  assert.ok(await p.$('#outExports button:has-text("print-outworld-edge-clip-x2.stl")'));
 });
 await check('zip export works with no network',async p=>{
   const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#zipAll')]);

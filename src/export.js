@@ -7,7 +7,8 @@ import {heatFrameLayers} from './heat.js';
 import {svgToDxf} from './dxf.js';
 import {escapeHtml} from './sanitize.js';
 import {hardwareParts,pegPart,keyPart,PEG_FIT,JOIN_LEG} from './hardware.js';
-import {boltDia} from './params.js';
+import {boltDia,printed} from './params.js';
+import {recorder,shapesToSolids,partSolid,printFile} from './stl.js';
 
 /* ---------------- export ---------------- */
 export function svgDoc(w,h,body,title){
@@ -50,51 +51,116 @@ function socketCuts(G,geo,d,tab){
   return geo.sockets.map(o=>d.rect(borderSlot(o,tab,G.t,PEG_FIT))).concat(geo.joints.map(o=>d.rect(borderSlot(o,JOIN_LEG,G.t,PEG_FIT))));
 }
 
+// the shapes of each flat piece, drawn with any pen: the SVG pen for cutting, the recorder for printing
+function sheetBody(G,P,geo,pn,side,slots,vents,label){
+  const W=P.W,H=P.H,b=[],sockTab=geo.socketL-4;
+  const fillOn=s=>P.fillSide==='both'||P.fillSide===s||(P.fillSide==='service'&&G.service===s);
+  b.push(pn.outline(rectPts(0,0,W,H)));
+  for(const s of slots)b.push(pn.rect(s));
+  if(G.service===side)for(const s of [...geo.doorSlots,...geo.sensorBoxes,...geo.vialSlots])b.push(pn.rect(s));
+  b.push(...fastenerCuts(G,P,geo,pn));
+  b.push(...socketCuts(G,geo,pn,sockTab));
+  if(vents)for(const v of geo.vents)b.push(pn.hole(v.x,v.y,P.ventD));
+  if(fillOn(side))for(const f of geo.fills)b.push(pn.hole(f.x,f.y,P.fillD));
+  if(P.engraveIds)b.push(pn.txt(W/2,Math.min(3,P.B*0.2),label,Math.min(3,P.B*0.2)));
+  return b;
+}
+function frameBody(G,P,geo,pn,pieces){
+  const b=[];
+  for(const f of pieces){b.push(pn.outline(f.poly));if(f.hole)b.push(pn.cutout(f.hole));}
+  b.push(...fastenerCuts(G,P,geo,pn),...socketCuts(G,geo,pn,geo.socketL-4));
+  return b;
+}
+const coverBody=(G,P,geo,pn)=>[pn.outline(rectPts(0,0,P.W,P.H)),...geo.sockets.map(o=>pn.rect(borderSlot(o,geo.socketL-4,G.t,PEG_FIT)))];
+const heatTies=(G,P,geo,pn)=>[...fastenerCuts(G,P,geo,pn),...geo.joints.map(o=>pn.rect(borderSlot(o,JOIN_LEG,G.t,PEG_FIT)))];
+const sheetLabels=P=>P.orient==='flat'?['TOP SHEET (top face up, north edge)','FLOOR SHEET (inside face up, north edge)']:['FRONT (outside face up, top edge)','BACK (inside face up, top edge)'];
+// wall strips, ready to place on a cut sheet or a print plate
+function stripItems(G,P,geo){
+  return geo.pieces.map(pc=>({w:pc.e-pc.s,h:G.depth+2*P.S,frost:pc.kind==='wall'||pc.kind==='angle',draw(pn,x,y){
+    const ty=y+P.S,o=[pn.outline(stripOutline(pc,G,P),x,ty)];
+    for(const [a0,a1] of pc.windows)o.push(pn.cutout(rectPts(a0,2,a1,G.depth-2),x,ty));
+    if(P.engraveIds&&(pc.kind==='wall'||pc.kind==='angle')&&this.w>=14){
+      const lx=labelX(this.w,pc.notches.map(n=>n-pc.s),G.tunnelW,pc.id);
+      if(lx!==null)o.push(pn.txt(x+lx,ty+G.depth/2,pc.id,Math.min(2.6,G.depth/4)));
+    }
+    return o;
+  }}));
+}
+// shelf-packs items onto sheets or print plates
+function shelf(items,W,H,gap){
+  const margin=5,sheets=[];let cur=null,x=0,y=0,rowH=0;
+  const next=()=>{cur=[];sheets.push(cur);x=margin;y=margin;rowH=0;};
+  next();
+  for(const it of items.slice().sort((a,b)=>b.w-a.w)){
+    if(x+it.w>W-margin){x=margin;y+=rowH+gap;rowH=0;}
+    if(y+it.h>H-margin&&cur.length)next();
+    cur.push({it,x,y});x+=it.w+gap;rowH=Math.max(rowH,it.h);
+  }
+  return sheets.filter(s=>s.length);
+}
+const HW_KEY={door:'door',saddle:'saddle',peg:'peg',key:'key','panel joiner':'joiner',plug:'plug','plug pin':'plug','vial ring':'vial','vial post':'vial','cover leg':'coverLeg','sensor plug':'sensor',foot:'foot'};
+export const hwPrinted=(P,name)=>!!HW_KEY[name]&&printed(P,HW_KEY[name]);
+// printed versions of the small parts; stacks become one solid
+function hwPrint(part,G,P){
+  const t=G.t;
+  if(part.name==='plug pin'||part.name==='vial post')return null;
+  if(part.name==='plug'){
+    const h=G.depth-heatFrameLayers(P)*t;
+    return {name:'port plug',qty:part.qty/(P.layers-heatFrameLayers(P)),solids:[partSolid({poly:part.poly},0,h)]};
+  }
+  if(part.name==='vial ring'){
+    const h=P.vialRings*t,posts=part.holes.map(s=>{const X=s.map(p=>p[0]),Y=s.map(p=>p[1]),cx=(Math.min(...X)+Math.max(...X))/2,cy=(Math.min(...Y)+Math.max(...Y))/2;
+      return partSolid({poly:rectPts(cx-2,cy-t/2,cx+2,cy+t/2)},h,h+P.S+1);});
+    return {name:'vial holder',qty:part.qty/P.vialRings,solids:[partSolid({poly:part.poly,circles:part.circles},0,h),...posts]};
+  }
+  return {name:part.name,qty:part.qty,solids:[partSolid(part,0,t)]};
+}
+// everything set to 3D print, as solids
+export function printPlan(G,L,P,geo){
+  const rec=recorder(),items=[],t=G.t,hf=heatFrameLayers(P),[top,floor]=sheetLabels(P);
+  const flat=P.orient==='flat';
+  if(printed(P,'front'))items.push({name:flat?'top sheet':'front sheet',qty:1,solids:shapesToSolids(sheetBody(G,P,geo,rec,'front',geo.slotsFront,true,top),0,P.S)});
+  if(printed(P,'back'))items.push({name:flat?'floor sheet':'back sheet',qty:1,solids:shapesToSolids(sheetBody(G,P,geo,rec,'back',geo.slotsBack,false,floor),0,P.S)});
+  if(printed(P,'frame')){
+    shapesToSolids(frameBody(G,P,geo,rec,geo.frame),0,(P.layers-hf)*t).forEach((s,i)=>items.push({name:`frame section ${i+1}`,qty:1,solids:[s]}));
+    if(geo.edgeHeat)shapesToSolids(frameBody(G,P,geo,rec,geo.edgeHeat.pieces),0,hf*t).forEach((s,i)=>items.push({name:`frame heat section ${i+1}`,qty:1,solids:[s]}));
+  }
+  if(printed(P,'cover')&&P.coverType==='whole'&&geo.sockets.length)items.push({name:'cover sheet',qty:1,solids:shapesToSolids(coverBody(G,P,geo,rec),0,P.S)});
+  if(printed(P,'heat')&&geo.heat){
+    const ties=heatTies(G,P,geo,rec);
+    shapesToSolids([...geo.heat.pieces.map(p=>rec.outline(p)),...ties],0,P.heatLayers*t).forEach((s,i)=>items.push({name:`heat layer section ${i+1}`,qty:1,solids:[s]}));
+    items.push({name:'heat base sheet',qty:1,solids:shapesToSolids([rec.outline(rectPts(0,0,P.W,P.H)),...ties],0,P.S)});
+  }
+  if(printed(P,'walls')){
+    // strips are all different, so they go onto print plates
+    shelf(stripItems(G,P,geo),P.printW,P.printD,3).forEach((plate,i,all)=>{
+      const shapes=plate.flatMap(({it,x,y})=>it.draw(rec,x,y));
+      items.push({name:`wall strips plate ${i+1} of ${all.length}`,qty:1,solids:shapesToSolids(shapes,0,t)});
+    });
+  }
+  for(const part of hardwareParts(G,L,P,geo))if(hwPrinted(P,part.name)){const it=hwPrint(part,G,P);if(it)items.push(it);}
+  return items;
+}
 export function exporters(G,L,P,geo){
   const d=pen(P);
   const W=P.W,H=P.H;
   const files=[];
-  const fillOn=side=>P.fillSide==='both'||P.fillSide===side||(P.fillSide==='service'&&G.service===side);
-  const sockTab=geo.socketL-4;
-  function sheet(side,name,slots,vents,label){
-    const b=[];
-    b.push(d.outline(rectPts(0,0,W,H)));
-    for(const s of slots)b.push(d.rect(s));
-    if(G.service===side)for(const s of [...geo.doorSlots,...geo.sensorBoxes,...geo.vialSlots])b.push(d.rect(s));
-    b.push(...fastenerCuts(G,P,geo,d));
-    b.push(...socketCuts(G,geo,d,sockTab));
-    if(vents)for(const v of geo.vents)b.push(d.hole(v.x,v.y,P.ventD));
-    if(fillOn(side))for(const f of geo.fills)b.push(d.hole(f.x,f.y,P.fillD));
-    if(P.engraveIds)b.push(d.txt(W/2,Math.min(3,P.B*0.2),label,Math.min(3,P.B*0.2)));
-    files.push({name,data:svgDoc(W,H,b.join('\n'),label)});
-  }
-  const flat=P.orient==='flat';
-  sheet('front','front-sheet.svg',geo.slotsFront,true,flat?'TOP SHEET (top face up, north edge)':'FRONT (outside face up, top edge)');
-  sheet('back','back-sheet.svg',geo.slotsBack,false,flat?'FLOOR SHEET (inside face up, north edge)':'BACK (inside face up, top edge)');
-  // frame layer
-  {
-    const b=[];
-    for(const f of geo.frame){b.push(d.outline(f.poly));if(f.hole)b.push(d.cutout(f.hole));}
-    b.push(...fastenerCuts(G,P,geo,d));
-    b.push(...socketCuts(G,geo,d,sockTab));
+  const [top,floor]=sheetLabels(P);
+  if(!printed(P,'front'))files.push({name:'front-sheet.svg',data:svgDoc(W,H,sheetBody(G,P,geo,d,'front',geo.slotsFront,true,top).join('\n'),top)});
+  if(!printed(P,'back'))files.push({name:'back-sheet.svg',data:svgDoc(W,H,sheetBody(G,P,geo,d,'back',geo.slotsBack,false,floor).join('\n'),floor)});
+  if(!printed(P,'frame')){
     const nFrame=P.layers-heatFrameLayers(P);
-    files.push({name:`frame-layer-cut-x${nFrame}.svg`,data:svgDoc(W,H,b.join('\n'),`Frame layer, cut ${nFrame} times`)});
+    files.push({name:`frame-layer-cut-x${nFrame}.svg`,data:svgDoc(W,H,frameBody(G,P,geo,d,geo.frame).join('\n'),`Frame layer, cut ${nFrame} times`)});
     if(geo.edgeHeat){
-      const e=[];
-      for(const f of geo.edgeHeat.pieces){e.push(d.outline(f.poly));if(f.hole)e.push(d.cutout(f.hole));}
-      e.push(...fastenerCuts(G,P,geo,d),...socketCuts(G,geo,d,sockTab));
       const n=heatFrameLayers(P);
-      files.push({name:`frame-heat-layer-cut-x${n}.svg`,data:svgDoc(W,H,e.join('\n'),`Bottom frame layer with heat groove, cut ${n} times. No port cuts: ports sit above it`)});
+      files.push({name:`frame-heat-layer-cut-x${n}.svg`,data:svgDoc(W,H,frameBody(G,P,geo,d,geo.edgeHeat.pieces).join('\n'),`Bottom frame layer with heat groove, cut ${n} times. No port cuts: ports sit above it`)});
     }
   }
-  // cover
-  if(P.coverType==='whole'&&geo.sockets.length){
-    const b=[d.outline(rectPts(0,0,W,H)),...geo.sockets.map(o=>d.rect(borderSlot(o,sockTab,G.t,PEG_FIT)))];
-    files.push({name:'cover-sheet.svg',data:svgDoc(W,H,b.join('\n'),'Cover sheet (red acrylic)')});
-  }
+  if(P.coverType==='whole'&&geo.sockets.length&&!printed(P,'cover'))
+    files.push({name:'cover-sheet.svg',data:svgDoc(W,H,coverBody(G,P,geo,d).join('\n'),'Cover sheet (red acrylic)')});
   // heat layers sit under the floor sheet, so they only need the fasteners and joiner slots
-  if(geo.heat){
-    const ties=[...fastenerCuts(G,P,geo,d),...geo.joints.map(o=>d.rect(borderSlot(o,JOIN_LEG,G.t,PEG_FIT)))];
+  if(geo.heat&&!printed(P,'heat')){
+    const ties=heatTies(G,P,geo,d);
     const body=[...geo.heat.pieces.map(p=>d.outline(p)),...ties];
     files.push({name:`heat-layer-cut-x${P.heatLayers}.svg`,data:svgDoc(W,H,body.join('\n'),`Heat channel layer, cut ${P.heatLayers} times from the wall sheet`)});
     files.push({name:'heat-base-sheet.svg',data:svgDoc(W,H,[d.outline(rectPts(0,0,W,H)),...ties].join('\n'),'Heat channel base sheet')});
@@ -103,43 +169,27 @@ export function exporters(G,L,P,geo){
   const frostPath=pts=>`<path d="${polyD(pts)}" fill="${P.engraveColor}" stroke="none"/>`;
   const frostAreas=mode=>mode==='frosted'?[rectPts(P.B,P.B,W-P.B,H-P.B)]
     :mode==='chosen'?L.frost.map(([r,c])=>rectPts(G.xs[c],G.ys[r],G.xs[c+1],G.ys[r+1])):[];
-  const floor=frostAreas(P.floorFinish),ceiling=frostAreas(P.ceilingFinish);
-  if(floor.length)files.push({name:'floor-frost-layer.svg',data:svgDoc(W,H,floor.map(frostPath).join('\n'),'Frost the inside of the floor or back sheet, in the same position, before cutting')});
+  const floorF=printed(P,'back')?[]:frostAreas(P.floorFinish),ceiling=printed(P,'front')?[]:frostAreas(P.ceilingFinish);
+  if(floorF.length)files.push({name:'floor-frost-layer.svg',data:svgDoc(W,H,floorF.map(frostPath).join('\n'),'Frost the inside of the floor or back sheet, in the same position, before cutting')});
   // the top sheet is frosted on its inside face, so this file is mirrored for the sheet turned over
   if(ceiling.length)files.push({name:'ceiling-frost-layer.svg',data:svgDoc(W,H,ceiling.map(p=>frostPath(p.map(([x,y])=>[W-x,y]))).join('\n'),'Frost the inside of the top or front sheet: turn the sheet over, in the same position, before cutting')});
   // everything cut from the wall sheet, shelf-packed onto stock sheets
-  const items=geo.pieces.map(pc=>({w:pc.e-pc.s,h:G.depth+2*P.S,frost:pc.kind==='wall'||pc.kind==='angle',draw(x,y){
-    const ty=y+P.S,o=[d.outline(stripOutline(pc,G,P),x,ty)];
-    for(const [a0,a1] of pc.windows)o.push(d.cutout(rectPts(a0,2,a1,G.depth-2),x,ty));
-    if(P.engraveIds&&(pc.kind==='wall'||pc.kind==='angle')&&this.w>=14){
-      const lx=labelX(this.w,pc.notches.map(n=>n-pc.s),G.tunnelW,pc.id);
-      if(lx!==null)o.push(d.txt(x+lx,ty+G.depth/2,pc.id,Math.min(2.6,G.depth/4)));
-    }
-    return o;
-  }}));
+  const items=printed(P,'walls')?[]:stripItems(G,P,geo);
   const kit=hardwareParts(G,L,P,geo);
-  for(const part of kit)for(let n=0;n<part.qty;n++)items.push({w:part.w,h:part.h,draw(x,y){
-    const o=[d.outline(part.poly,x,y)];
-    for(const h of part.holes)o.push(d.cutout(h,x,y));
-    for(const [cx,cy,dia] of part.circles||[])o.push(d.hole(x+cx,y+cy,dia));
+  for(const part of kit)if(!hwPrinted(P,part.name))for(let n=0;n<part.qty;n++)items.push({w:part.w,h:part.h,draw(pn,x,y){
+    const o=[pn.outline(part.poly,x,y)];
+    for(const h of part.holes)o.push(pn.cutout(h,x,y));
+    for(const [cx,cy,dia] of part.circles||[])o.push(pn.hole(x+cx,y+cy,dia));
     return o;
   }});
-  items.sort((a,b)=>b.w-a.w);
-  const margin=5,gap=2+P.kerf;
-  const sheets=[];let cur=null,x=0,y=0,rowH=0;
-  const newSheet=()=>{cur=[];sheets.push(cur);x=margin;y=margin;rowH=0;};
-  newSheet();
-  for(const it of items){
-    if(x+it.w>P.stockW-margin){x=margin;y+=rowH+gap;rowH=0;}
-    if(y+it.h>P.stockH-margin){newSheet();}
-    cur.push({it,x,y});x+=it.w+gap;rowH=Math.max(rowH,it.h);
-  }
+  const sheets=items.length?shelf(items,P.stockW,P.stockH,2+P.kerf):[];
   sheets.forEach((sh,i)=>{
     const b=[];
-    for(const {it,x,y} of sh)b.push(...it.draw(x,y));
+    for(const {it,x,y} of sh)b.push(...it.draw(d,x,y));
     files.push({name:`parts-sheet-${i+1}.svg`,data:svgDoc(P.stockW,P.stockH,b.join('\n'),`Wall sheet parts, sheet ${i+1} of ${sheets.length}`)});
     if(P.wallFinish==='one'||P.wallFinish==='both'){
       const faces=sh.filter(s=>s.it.frost).map(({it,x,y})=>rectPts(x,y+P.S,x+it.w,y+P.S+G.depth));
+      if(!faces.length)return;
       files.push({name:`parts-frost-${i+1}.svg`,data:svgDoc(P.stockW,P.stockH,faces.map(frostPath).join('\n'),`Frost wall strips on sheet ${i+1}, before cutting, in the same position`)});
       if(P.wallFinish==='both')files.push({name:`parts-frost-${i+1}-side-b.svg`,data:svgDoc(P.stockW,P.stockH,faces.map(p=>frostPath(p.map(([x,y])=>[P.stockW-x,y]))).join('\n'),`Second side: turn the sheet over left to right, back into the same corner, then frost. Stock must be exactly ${P.stockW}mm wide`)});
     }
@@ -147,10 +197,12 @@ export function exporters(G,L,P,geo){
   const asm=drawTopdown(G,L,P,geo,null,{labels:true,mm:true});
   files.push({name:'assembly-map.svg',data:`<?xml version="1.0" encoding="UTF-8"?>\n`+asm});
   if(P.exportDxf)for(const f of files.slice()){
-    if(/frost|assembly/.test(f.name))continue;
+    if(/frost|assembly/.test(f.name)||!f.name.endsWith('.svg'))continue;
     files.push({name:f.name.replace('.svg','.dxf'),data:svgToDxf(f.data)});
   }
-  return {files,stripSheets:sheets.length,kit};
+  const prints=printPlan(G,L,P,geo);
+  for(const it of prints)files.push(printFile(it));
+  return {files,stripSheets:sheets.length,kit,prints};
 }
 
 // One small sheet that checks kerf, tab fit, door fit, peg fit and vent sizes before a full cut.

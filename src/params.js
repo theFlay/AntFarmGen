@@ -2,6 +2,17 @@
 export const BOLTS={M2:[2.4,3.8],'M2.5':[2.9,4.5],M3:[3.4,5.5],M4:[4.5,7],M5:[5.5,8.5],M6:[6.6,10],M8:[9,13]};
 export const boltDia=P=>P.boltSize==='custom'||!BOLTS[P.boltSize]?P.boltD:BOLTS[P.boltSize][0];
 export const boltHead=P=>P.boltSize==='custom'||!BOLTS[P.boltSize]?P.boltD*1.6:BOLTS[P.boltSize][1];
+export const MAT_OPTS=[['acrylic','Acrylic'],['print','3D print']];
+// part types that can be cut or printed; some print as one solid piece instead of a stack
+export const NEST_MATS=[
+  ['front','Top or front sheet'],['back','Floor or back sheet'],
+  ['frame','Frame','Prints as one solid piece per section instead of a stack of layers.'],
+  ['walls','Wall strips'],['door','Doors'],['saddle','Door saddles'],['peg','Pegs'],['key','Keys'],
+  ['joiner','Panel joiners'],['plug','Port plugs','Prints as one solid plug, with no pin.'],
+  ['vial','Vial holders','Prints as one holder with its posts.'],['cover','Red cover'],['coverLeg','Cover legs'],
+  ['sensor','Sensor plugs'],['foot','Upright feet'],['heat','Heat channel layers','Prints as one solid layer.'],
+];
+export const printed=(P,k)=>P['m_'+k]==='print';
 export const PARAMS=[
  ['Panel',true,[
   {k:'W',l:'Panel width (mm)',d:400},
@@ -100,8 +111,16 @@ export const PARAMS=[
   {k:'chamfer',l:'Chamfer sharp corners (mm)',d:0,step:1,h:'0 = none. Cuts off the tight corners of diagonals. Try 14.'},
   {k:'jogSize',l:'Jog size (mm)',d:8,step:0.5,h:'Under 8mm the angled strip has no room for a tab. Under 6mm there are no jogs.'},
  ]],
+ ['Machines and materials',false,[
+  {k:'bed',l:'Laser cutting area',d:'none',opts:[['none','No check'],['speedy300','Trotec Speedy 300'],['speedy360','Trotec Speedy 360'],['custom','Custom size']],h:'Acrylic parts and sheets must fit this.'},
+  {k:'bedW',l:'Custom laser width (mm)',d:600},
+  {k:'bedH',l:'Custom laser height (mm)',d:400},
+  {k:'printW',l:'3D print area width (mm)',d:220,h:'The biggest print you can make. Printed parts must fit flat on it.'},
+  {k:'printD',l:'3D print area depth (mm)',d:220},
+  {k:'printH',l:'3D print area height (mm)',d:250},
+  ...NEST_MATS.map(([k,l,h],i)=>({k:'m_'+k,l,d:'acrylic',opts:MAT_OPTS,h:i===0?'3D printed parts come out as STL files that fit the same slots. They have no kerf offset and no engraved text, so print a test piece first.'+(h?' '+h:''):h})),
+ ]],
  ['Export',false,[
-  {k:'bed',l:'Laser bed check',d:'none',opts:[['none','None'],['speedy300','Trotec Speedy 300'],['speedy360','Trotec Speedy 360']]},
   {k:'exportDxf',l:'Also export DXF',d:false,bool:true,h:'Adds a DXF of each cut file. Engraving stays in the SVG.'},
   {k:'stockW',l:'Wall sheet stock width (mm)',d:600},
   {k:'stockH',l:'Wall sheet stock height (mm)',d:400},
@@ -116,6 +135,6 @@ const RANGES={W:[60,3000],H:[60,3000],B:[5,100],workerLen:[1,100],queenLen:[1,10
   t:[0.5,20],layers:[1,20],S:[0.5,20],tunnelH:[1,200],tabL:[2,100],tabPitch:[5,500],kerf:[0,2],slotClear:[-2,2],doorFit:[0,2],doorGrip:[3,30],
   lipH:[0,30],pegW:[4,30],coverStand:[1,100],portPitch:[0,2000],portOffset:[0,2000],boltD:[1,30],boltSpacing:[10,1000],spongeD:[1,100],
   spongeLen:[1,500],slotW:[0.1,20],fillD:[0.5,50],ventD:[0.1,20],ventGrid:[0,8],seed:[0,1e9],brood:[0,30],oddShare:[0,1],oddMax:[2,12],
-  activeCount:[0,1000],loops:[0,1],sponges:[0,200],stockW:[50,3000],stockH:[50,3000],diagShare:[0,1],jogShare:[0,1],jogSize:[0,50],joinerQty:[0,50],sensorW:[5,80],sensorH:[5,80],heatW:[3,30],heatLayers:[1,10],heatPitch:[15,300],heatEdgeW:[2,15],heatEdgeLayers:[1,6],vialD:[8,80],vialRings:[1,10],chamfer:[0,40]};
+  activeCount:[0,1000],bedW:[50,3000],bedH:[50,3000],printW:[20,2000],printD:[20,2000],printH:[5,2000],loops:[0,1],sponges:[0,200],stockW:[50,3000],stockH:[50,3000],diagShare:[0,1],jogShare:[0,1],jogSize:[0,50],joinerQty:[0,50],sensorW:[5,80],sensorH:[5,80],heatW:[3,30],heatLayers:[1,10],heatPitch:[15,300],heatEdgeW:[2,15],heatEdgeLayers:[1,6],vialD:[8,80],vialRings:[1,10],chamfer:[0,40]};
 for(const g of PARAMS)for(const f of g[2])if(RANGES[f.k])f.range=RANGES[f.k];
 export const ALL_FIELDS=PARAMS.flatMap(g=>g[2]);

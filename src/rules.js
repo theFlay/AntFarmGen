@@ -2,6 +2,22 @@ import {interiorEdges,getEdge} from './layout.js';
 import {spongeLength} from './generate.js';
 import {heatFrameLayers} from './heat.js';
 import {coverStand,JOINER_RISE} from './hardware.js';
+import {printPlan} from './export.js';
+import {solidBounds,fitsPrinter} from './stl.js';
+import {NEST_MATS,printed} from './params.js';
+import {f1} from './util.js';
+
+export const BEDS={speedy300:[737,432,'Speedy 300 bed'],speedy360:[813,508,'Speedy 360 bed']};
+export const laserBed=P=>P.bed==='custom'?[P.bedW,P.bedH,'laser cutting area']:BEDS[P.bed]||null;
+// printed parts that are too big for the printer, grouped so a split frame gives one message
+export function printProblems(items,P){
+  const out=[];
+  for(const it of items){
+    const b=solidBounds(it.solids);
+    if(!fitsPrinter(b,P))out.push(`The printed ${it.name} is ${f1(b.w)} x ${f1(b.d)} x ${f1(b.h)}mm, too big for the ${P.printW} x ${P.printD} x ${P.printH}mm print area. Set it to acrylic under Machines and materials.`);
+  }
+  return out;
+}
 
 /* Every chamber must join the whole nest. The starting area is the open part on day one:
    closed doors separate it from the rest, so it must work on its own. */
@@ -82,11 +98,18 @@ export function checkRules(G,L,P,geo){
   if(P.joinerQty>0&&!geo.joints.length)msgs.push(['warn','Panel joiners need Slots for joining panels on, and a border of at least 12mm.']);
   if(P.coverType==='whole'&&geo.joints.length&&coverStand(G,P)<JOINER_RISE+1)msgs.push(['warn',`A ${coverStand(G,P)}mm cover gap is too low to clear panel joiners, which stick up about ${JOINER_RISE}mm.`]);
   if(P.activeCount>0&&act.length>P.activeCount)msgs.push(['warn',`The starting area has ${act.length} chambers, more than the ${P.activeCount} set under Auto layout. It must hold a port, a sponge and a brood chamber, and the Starting area tool can also change it.`]);
-  const BEDS={speedy300:[737,432,'Speedy 300'],speedy360:[813,508,'Speedy 360']},bed=BEDS[P.bed];
+  const bed=laserBed(P);
   if(bed){
     const fits=(w,h)=>(w<=bed[0]&&h<=bed[1])||(w<=bed[1]&&h<=bed[0]);
-    if(!fits(P.W,P.H))msgs.push(['error',`A ${P.W} x ${P.H}mm panel is too big for the ${bed[2]} bed (${bed[0]} x ${bed[1]}mm).`]);
-    if(!fits(P.stockW,P.stockH))msgs.push(['error',`${P.stockW} x ${P.stockH}mm stock is too big for the ${bed[2]} bed (${bed[0]} x ${bed[1]}mm).`]);
+    const cutSheets=['front','back','frame','cover'].some(k=>!printed(P,k));
+    if(cutSheets&&!fits(P.W,P.H))msgs.push(['error',`A ${P.W} x ${P.H}mm panel is too big for the ${bed[2]} (${bed[0]} x ${bed[1]}mm).`]);
+    if(!fits(P.stockW,P.stockH))msgs.push(['error',`${P.stockW} x ${P.stockH}mm stock is too big for the ${bed[2]} (${bed[0]} x ${bed[1]}mm).`]);
+  }
+  const nPrint=NEST_MATS.filter(([k])=>printed(P,k)).length;
+  if(nPrint){
+    const items=printPlan(G,L,P,geo);
+    for(const m of printProblems(items,P))msgs.push(['error',m]);
+    msgs.push(['info',`${nPrint} part type${nPrint>1?'s are':' is'} set to 3D print, giving ${items.length} STL file${items.length===1?'':'s'}. Printed parts match the acrylic sizes with no kerf offset, so print one first and check it fits.`]);
   }
   if(geo.heat)msgs.push(['info','Heat channel added. Always run the cable from a thermostat, and keep it well below the point where acrylic softens. Keep part of the nest unheated so the ants can choose.']);
   const shortA=geo.pieces.filter(p=>p.kind==='angle'&&!p.top.length).length;

@@ -15,6 +15,7 @@ import {portCells} from './generate.js';
 import {cleanLayout,cleanParam,escapeHtml} from './sanitize.js';
 import JSZip from 'jszip';
 import {RACK_FIELDS,buildRack,rackFiles,rackHoleTest,rackPreview,rackDefaults} from './rack.js';
+import {OUT_FIELDS,buildOutworld,outworldFiles,outworldPreview,outDefaults,tubeHoleTest} from './outworld.js';
 function buildForm(){
   const root=document.getElementById('controls');
   let html='';
@@ -118,7 +119,7 @@ function render(){
     ['Tunnels',`${f1(G.tunnelW)} wide x ${f1(G.tunnelH)} high`],['Open at start',`${act.length} of ${geo.ch.list.length} chambers`],
     ['Tunnels / sponges',`${tunnels} / ${spongesN}`],['Strip parts',`${geo.pieces.length} (${f1(stripLen/1000)} m)`],
     ['Wall sheets',`${ex.stripSheets} at ${P.stockW} x ${P.stockH}`],['Frame',`${geo.frame.length} pieces x ${P.layers} layers`],
-    ['Ports that always line up',lineUp()],['Doors',`${geo.doors.length} (${geo.doors.filter(d=>d.closed).length} start closed)`],['Fasteners',`${geo.fasteners.length} ${P.fastener==='peg'?'pegs and keys':P.fastener==='bolt'?`${P.boltSize==='custom'?'':P.boltSize+' '}bolts, ${boltLength(G,P)}mm or longer`:''}`],['Panel joiners',geo.joints.length?`${Math.round(P.joinerQty||0)} clips, ${geo.joints.length} slots`:'no slots'],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
+    ['Ports that always line up',lineUp()],['Doors',`${geo.doors.length} (${geo.doors.filter(d=>d.closed).length} start closed)`],['Fasteners',`${geo.fasteners.length} ${P.fastener==='peg'?'pegs and keys':P.fastener==='bolt'?`${P.boltSize==='custom'?'':P.boltSize+' '}bolts, ${boltLength(G,P)}mm or longer`:''}`],['3D prints',ex.prints.length?`${ex.prints.length} STL file${ex.prints.length>1?'s':''}`:'none'],['Panel joiners',geo.joints.length?`${Math.round(P.joinerQty||0)} clips, ${geo.joints.length} slots`:'no slots'],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
   ];
   document.getElementById('stats').innerHTML=st.map(([a,b])=>`<div${a.startsWith('Ports that')?' class="wide"':''}><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
   document.getElementById('derived').textContent=`Pitch target ${f1(G.pitch)}mm, actual cells ${f1(G.cellW)} x ${f1(G.cellH)}mm, tunnels ${f1(G.tunnelW)}mm wide, depth ${f1(G.depth)}mm.${G.adjusted?' Cell count nudged so ports miss the walls.':''}`;
@@ -141,7 +142,7 @@ function lineUp(){
 // Only rebuilds buttons when they really change. Rebuilding between a mouse press and release
 // would lose the click, which happened when typing a value and clicking download straight away.
 function setButtons(el,html){if(el._html!==html){el.innerHTML=html;el._html=html;}}
-function setStatus(s){document.getElementById('status').textContent=s;const r=document.getElementById('rackStatus');if(r)r.textContent=s;}
+function setStatus(s){document.getElementById('status').textContent=s;for(const id of ['rackStatus','outStatus']){const r=document.getElementById(id);if(r)r.textContent=s;}}
 
 /* ---------------- editing ---------------- */
 function onPreviewClick(ev){
@@ -284,7 +285,7 @@ async function saveFile(name,data){
     catch(e){setStatus(e&&e.code==='declined'?'Save cancelled.':'Could not save '+name+': '+((e&&(e.message||e.code))||'unknown error'));}
     return;
   }
-  const blob=data instanceof Blob?data:new Blob([data],{type:name.endsWith('.json')?'application/json':'image/svg+xml'});
+  const blob=data instanceof Blob?data:new Blob([data],{type:name.endsWith('.json')?'application/json':name.endsWith('.stl')?'model/stl':'image/svg+xml'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
   setStatus('Downloaded '+name+'.');
@@ -321,14 +322,14 @@ function buildRackForm(){
   }
 }
 function renderRack(){
-  const r=buildRack(rackState);
+  const r=buildRack(rackState,P);
   window.__nest.rack=r;
   document.getElementById('rackPreview').innerHTML=rackPreview(r);
   const msgs=[...r.errors.map(m=>['error',m]),...r.warnings.map(m=>['warn',m])];
   if(!r.errors.length)msgs.unshift(['ok','Ready to export.']);
   document.getElementById('rackChecks').innerHTML=msgs.map(([lv,m])=>`<div class="msg ${lv}">${escapeHtml(m)}</div>`).join('');
   const st=[['Tubes',`${r.R.left}${r.R.right?` + ${r.R.right}`:''}`],['Outer size',`${f1(r.Lo)} x ${f1(r.Wo)} mm`],['Height',`${f1(r.Hi+2*r.R.t)} mm`],
-    ['Hole size',`${f1(r.D)} mm`],['Held inside',`${f1(r.run)} mm of each tube`],['Parts',`${r.parts.length+r.cover.length}`]];
+    ['Hole size',`${f1(r.D)} mm`],['Held inside',`${f1(r.run)} mm of each tube`],['Parts',`${r.parts.length+r.cover.length}`],['3D prints',r.prints.length?`${r.prints.length} STL file${r.prints.length>1?'s':''}`:'none']];
   document.getElementById('rackStats').innerHTML=st.map(([a,b])=>`<div><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
   rackFilesNow=rackFiles(r,{cutColor:P.cutColor,engraveColor:P.engraveColor});
   const ok=!r.errors.length;
@@ -339,18 +340,69 @@ function renderRack(){
     pill.className='pill '+(ok?'good':'bad');pill.textContent=ok?'Ready to export':'Fix the checks';
   }
 }
+/* ---------------- outworld ---------------- */
+let outState=outDefaults(),outFilesNow=[];
+function buildOutForm(){
+  const groups=[...new Set(OUT_FIELDS.map(f=>f.g||'Outworld box'))];
+  let html='';
+  for(const g of groups){
+    html+=`<div class="group"><details${g==='Materials'?'':' open'}><summary>${g}</summary>`;
+    for(const f of OUT_FIELDS.filter(x=>(x.g||'Outworld box')===g)){
+      let input;
+      if(f.opts)input=`<select id="o_${f.k}">${f.opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
+      else if(f.bool)input=`<input type="checkbox" id="o_${f.k}">`;
+      else input=`<input type="number" inputmode="decimal" id="o_${f.k}" step="${f.step||1}">`;
+      html+=`<div class="field"><label for="o_${f.k}">${f.l}</label>${input}${f.h?`<small>${f.h}</small>`:''}</div>`;
+    }
+    html+='</details></div>';
+  }
+  html+='<p class="note">Sheet thickness, kerf, sheet size, port spacing and the nest itself come from the Nest panel page.</p>';
+  document.getElementById('outControls').innerHTML=html;
+  for(const f of OUT_FIELDS){
+    const el=document.getElementById('o_'+f.k);
+    if(f.bool)el.checked=!!f.d;else el.value=f.d;
+    el.addEventListener('change',()=>{
+      outState[f.k]=f.bool?el.checked:f.opts?el.value:parseFloat(el.value);
+      renderOut();
+    });
+  }
+}
+function renderOut(){
+  const ow=buildOutworld(outState,P,geo);
+  window.__nest.outworld=ow;
+  document.getElementById('outPreview').innerHTML=outworldPreview(ow);
+  const msgs=[...ow.errors.map(m=>['error',m]),...ow.warnings.map(m=>['warn',m]),...ow.notes.map(m=>['info',m])];
+  if(!ow.errors.length)msgs.unshift(['ok','Ready to export.']);
+  document.getElementById('outChecks').innerHTML=msgs.map(([lv,m])=>`<div class="msg ${lv}">${escapeHtml(m)}</div>`).join('');
+  const lidName={lift:'Lift-off',slide:'Sliding',open:'Open top with a lip'}[ow.O.lid];
+  const joins={tube:`${ow.O.tubes} tube${ow.O.tubes>1?'s':''}, ${f1(ow.O.tubeOD)}mm outside`,direct:'Docking onto the nest',none:'Nothing'}[ow.O.connect];
+  const st=[['Inside',`${f1(ow.L)} x ${f1(ow.W)} x ${f1(ow.O.owH)} mm`],['Outer size',`${f1(ow.outL)} x ${f1(ow.Wt)} x ${f1(ow.Hw)} mm`],
+    ['Floor height',`${f1(ow.floorTop)} mm`],['Lid',lidName],['Joins by',joins],['Parts',`${ow.parts.length+ow.lidParts.length+ow.conn.length}`],['3D prints',ow.prints.length?`${ow.prints.length} STL file${ow.prints.length>1?'s':''}`:'none']];
+  document.getElementById('outStats').innerHTML=st.map(([a,b])=>`<div><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
+  outFilesNow=outworldFiles(ow,{cutColor:P.cutColor,engraveColor:P.engraveColor});
+  const ok=!ow.errors.length;
+  setButtons(document.getElementById('outExports'),`<button id="outZip" class="primary"${ok?'':' disabled'}>Download everything (.zip)</button>`+
+    outFilesNow.map((f,i)=>`<button data-out="${i}"${ok?'':' disabled'}>${escapeHtml(f.name)}</button>`).join(''));
+  if(mode==='outworld'){
+    const pill=document.getElementById('pill'),warns=ow.warnings.length;
+    pill.className='pill '+(!ok?'bad':warns?'warn':'good');
+    pill.textContent=!ok?'Fix the checks':warns?`Ready, ${warns} warning${warns>1?'s':''}`:'Ready to export';
+  }
+}
 let mode='nest';
 function setMode(m){
   mode=m;
   document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));
   document.getElementById('nestView').hidden=m!=='nest';
   document.getElementById('rackView').hidden=m!=='rack';
-  if(m==='rack')renderRack();else render();
+  document.getElementById('outView').hidden=m!=='outworld';
+  if(m==='rack')renderRack();else if(m==='outworld')renderOut();else render();
 }
 
 function init(){
   buildForm();
   buildRackForm();
+  buildOutForm();
   P=readParams();
   render();
   document.getElementById('preview').addEventListener('click',onPreviewClick);
@@ -364,6 +416,16 @@ function init(){
       return;
     }
     const f=rackFilesNow[+b.dataset.rack];if(f)await saveFile(f.name,f.data);
+  });
+  document.getElementById('outTest').addEventListener('click',()=>{const f=tubeHoleTest(outState,P);saveFile(f.name,f.data);});
+  document.getElementById('outExports').addEventListener('click',async ev=>{
+    const b=ev.target.closest('button');if(!b||b.disabled)return;
+    if(b.id==='outZip'){
+      const zip=new JSZip();for(const f of outFilesNow)zip.file(f.name,f.data);
+      await saveFile(`outworld-${outState.owL}x${outState.owW}x${outState.owH}.zip`,await zip.generateAsync({type:'blob'}));
+      return;
+    }
+    const f=outFilesNow[+b.dataset.out];if(f)await saveFile(f.name,f.data);
   });
   document.querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>{
     tool=b.dataset.tool;joinFrom=null;routeEnds=[];document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x===b));render();

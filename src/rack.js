@@ -4,6 +4,15 @@
 import {fmt,rectPts} from './util.js';
 import {pen,svgDoc} from './export.js';
 import {cleanParam,escapeHtml} from './sanitize.js';
+import {MAT_OPTS} from './params.js';
+import {partSolid,ringSolid,printFile,solidBounds,fitsPrinter} from './stl.js';
+
+// part types that can be cut or printed; covers print as one piece
+export const RACK_MATS=[['end','End plates'],['stop','Stop walls'],['comb','Combs'],['side','Side walls'],['base','Base'],['lid','Lid'],
+  ['hood','Hood','Prints as one piece.'],['sheath','Sheaths','Each prints as one piece.'],['cap','Caps','Each prints as one piece, without its label.']];
+const RACK_KEY={'end plate':'end','stop wall':'stop',comb:'comb','side wall':'side',base:'base',lid:'lid'};
+export const rackKey=name=>RACK_KEY[name]||name.split(' ')[0];
+const ONE_PIECE=new Set(['hood','sheath','cap']);
 
 export const RACK_FIELDS=[
   {k:'tubeD',l:'Tube diameter (mm)',d:16,step:0.5,range:[5,60],h:'Measure the outside of your widest tube.'},
@@ -30,12 +39,13 @@ export const RACK_FIELDS=[
   {k:'slotClear',l:'Slot clearance (mm)',d:0,step:0.01,range:[-2,2]},
   {k:'stockW',l:'Sheet width (mm)',d:600,range:[50,3000]},
   {k:'stockH',l:'Sheet height (mm)',d:400,range:[50,3000]},
+  ...RACK_MATS.map(([k,l,h])=>({k:'m_'+k,g:'Materials',l,d:'acrylic',opts:MAT_OPTS,h})),
 ];
 export const rackDefaults=()=>Object.fromEntries(RACK_FIELDS.map(f=>[f.k,f.d]));
 export const cleanRack=R=>Object.fromEntries(RACK_FIELDS.map(f=>[f.k,cleanParam(f,f.k in R?R[f.k]:f.d)]));
 
 // a plate with tabs (positive depth) or notches (negative depth) on any edge
-function plate(w,h,f={}){
+export function plate(w,h,f={}){
   const pts=[[0,0]];
   const by=(a,dir)=>(a||[]).slice().sort((x,y)=>dir*(x.u-y.u));
   for(const {u,l,d} of by(f.top,1))pts.push([u-l/2,0],[u-l/2,-d],[u+l/2,-d],[u+l/2,0]);
@@ -48,9 +58,10 @@ function plate(w,h,f={}){
   const ox=-Math.min(...pts.map(p=>p[0])),oy=-Math.min(...pts.map(p=>p[1]));
   return {poly:pts.map(([x,y])=>[x+ox,y+oy]),w:Math.max(...pts.map(p=>p[0]))+ox,h:Math.max(...pts.map(p=>p[1]))+oy,ox,oy};
 }
-const spread=(len,tab)=>len>=4*tab?[len/4,3*len/4]:[len/2];
+export const spread=(len,tab)=>len>=4*tab?[len/4,3*len/4]:[len/2];
 
-export function buildRack(input){
+// M is the printer size from the nest page
+export function buildRack(input,M={printW:220,printD:220,printH:250}){
   const R=cleanRack(input),{t,gap}=R,errors=[],warnings=[];
   const D=R.tubeD+R.holeClear,twoSided=R.right>0,lift=2,inset=6,head=3;
   const run=R.tubeL-R.stick;                     // from the end plate's outer face to the stop wall
@@ -140,13 +151,14 @@ export function buildRack(input){
   const cover=[];
   if(lid)cover.push({name:'lid',w:Lo,h:Wo,poly:rectPts(0,0,Lo,Wo),holes:topSlots,circles:[],labels:[]});
   // a four or five sided box with no bottom, resting on the bench
+  const boxes=[];
   function box(name,inL,inW,hh,ends){
     const tl=10,xs=spread(inL,tl),ys=spread(inW,tl),sideH=Math.min(tl,hh-6),hl=inL+2*t,hw=inW+2*t;
     const endX=ends===2?[t/2,hl-t/2]:[hl-t/2];
     const top=[];
     for(const y of [t/2+3,hw+3-t/2])for(const u of xs)top.push(slotAlong(t+u,y,tl));
     for(const x of endX)for(const u of ys)top.push(slotAcross(x,t+3+u,tl));
-    cover.push({name:name+' top',w:hl+3,h:hw+6,poly:rectPts(-3,0,hl+3,hw+6).map(([x,y])=>[x+3,y]),holes:top.map(p=>p.map(([x,y])=>[x+3,y])),circles:[],labels:[]});
+    cover.push({name:name+' top',w:hl+6,h:hw+6,poly:rectPts(-3,0,hl+3,hw+6).map(([x,y])=>[x+3,y]),holes:top.map(p=>p.map(([x,y])=>[x+3,y])),circles:[],labels:[]});
     for(let i=0;i<2;i++){
       const p=plate(hl,hh,{top:xs.map(u=>({u:t+u,l:tl,d:t}))});
       const holes=endX.map(x=>rectPts(x-t/2-cl/2,p.oy+hh/2-sideH/2-cl/2,x+t/2+cl/2,p.oy+hh/2+sideH/2+cl/2));
@@ -156,6 +168,7 @@ export function buildRack(input){
       const q=plate(inW,hh,{top:ys.map(u=>({u,l:tl,d:t})),left:[{u:hh/2,l:sideH,d:t}],right:[{u:hh/2,l:sideH,d:t}]});
       cover.push({name:name+' end',w:q.w,h:q.h,poly:q.poly,holes:[],circles:[],labels:[]});
     }
+    boxes.push({name,hl,hw,hh,ends});
     return {hl,hw};
   }
   const rackH=Hi+2*t,reach=R.stick+4;
@@ -219,13 +232,41 @@ export function buildRack(input){
     if(s)faceTop.labels.push([(i%3+0.5)*faceTop.w/3,(Math.floor(i/3)+0.5)*faceTop.h/3,s,fitSize(s,faceTop.w/3-4,R.faceSize)]);
   }
   if(R.labels&&R.labelFace&&twoSided&&[2,5,8].some(i=>R['face'+i].trim()))warnings.push('Face text in the middle column will sit close to the tube labels.');
-  for(const p of [...parts,...cover])if(p.w>R.stockW-10||p.h>R.stockH-10)errors.push(`The ${p.name} is ${fmt(p.w)} x ${fmt(p.h)}mm, too big for the ${R.stockW} x ${R.stockH}mm sheet.`);
+  for(const p of [...parts,...cover].filter(p=>R['m_'+rackKey(p.name)]!=='print'))if(p.w>R.stockW-10||p.h>R.stockH-10)errors.push(`The ${p.name} is ${fmt(p.w)} x ${fmt(p.h)}mm, too big for the ${R.stockW} x ${R.stockH}mm sheet.`);
   if(hood)warnings.push('A hood blocks air and light. Tubes breathe through their cotton, so lift it often to check for condensation or mould.');
   if(R.cover==='sheath'||R.cover==='caps')warnings.push('Cut covers from red acrylic, the same as the rack. Check each tube can still breathe through its cotton.');
-  return {R,parts,cover,errors,warnings,Lo,Wo,Hi,D,run,tubes,inset,edge,stops,ends,combs:combs.map(c=>c.x),capOut,capLen,hoodSize,sheathSize,rackH};
+  // printed parts: flat ones by type, covers as one solid piece each
+  const pr=k=>R['m_'+k]==='print',prints=[],byName=new Map();
+  for(const p of [...parts,...cover]){
+    const k=rackKey(p.name);
+    if(!pr(k)||ONE_PIECE.has(k))continue;
+    if(!byName.has(p.name))byName.set(p.name,{p,qty:0});
+    byName.get(p.name).qty++;
+  }
+  for(const [name,{p,qty}] of byName)prints.push({name,qty,solids:[partSolid(p,0,t)]});
+  for(const b of boxes.filter(b=>pr(b.name))){
+    // lying on its top: the top, then the walls as one ring (two ends) or a U (one open end)
+    const {hl,hw,hh}=b,x0=3,y0=3,x1=hl+3,y1=hw+3;
+    const walls=b.ends===2?[ringSolid(rectPts(x0,y0,x1,y1),rectPts(x0+t,y0+t,x1-t,y1-t),t,t+hh)]
+      :[{outer:[[x0,y0],[x1,y0],[x1,y1],[x0,y1],[x0,y1-t],[x1-t,y1-t],[x1-t,y0+t],[x0,y0+t]],holes:[],z0:t,z1:t+hh}];
+    const same=prints.find(q=>q.name===b.name);
+    if(same)same.qty++;else prints.push({name:b.name,qty:1,solids:[partSolid({poly:rectPts(0,0,hl+6,hw+6)},0,t),...walls]});
+  }
+  if(R.cover==='caps'&&pr('cap')){
+    const o=rectPts(0,0,capOut,capOut);
+    prints.push({name:'cap',qty:total,solids:[partSolid({poly:o},0,t),ringSolid(o,rectPts(t,t,t+capW,t+capW),t,capLen)]});
+    if(R.labels&&R.labelCovers)warnings.push('Printed caps have no labels. Write on them, or cut them from acrylic.');
+  }
+  if(R.cover==='sheath'&&pr('sheath')&&R.labels&&R.labelCovers)warnings.push('Printed sheaths have no labels. Write on them, or cut them from acrylic.');
+  for(const it of prints){
+    const b=solidBounds(it.solids);
+    if(!fitsPrinter(b,M))errors.push(`The printed ${it.name} is ${fmt(b.w)} x ${fmt(b.d)} x ${fmt(b.h)}mm, too big for the ${M.printW} x ${M.printD} x ${M.printH}mm print area. Set it to acrylic.`);
+  }
+  const cutParts=parts.filter(p=>!pr(rackKey(p.name))),cutCover=cover.filter(p=>!pr(rackKey(p.name)));
+  return {R,parts,cover,cutParts,cutCover,prints,errors,warnings,Lo,Wo,Hi,D,run,tubes,inset,edge,stops,ends,combs:combs.map(c=>c.x),capOut,capLen,hoodSize,sheathSize,rackH};
 }
 
-function nest(items,R){
+export function packParts(items,R){
   const sorted=items.slice().sort((a,b)=>b.w-a.w),margin=5,gap=2+R.kerf,sheets=[];
   let cur,x,y,rowH;
   const next=()=>{cur=[];sheets.push(cur);x=margin;y=margin;rowH=0;};
@@ -240,7 +281,7 @@ function nest(items,R){
 export function rackFiles(rack,colors={cutColor:'#ff0000',engraveColor:'#000000'}){
   const {R}=rack,d=pen({kerf:R.kerf,...colors}),files=[];
   const draw=(list,name,title)=>{
-    nest(list,R).forEach((sheet,i,all)=>{
+    packParts(list,R).forEach((sheet,i,all)=>{
       const b=[];
       for(const {it,x,y} of sheet){
         b.push(d.outline(it.poly,x,y));
@@ -251,8 +292,9 @@ export function rackFiles(rack,colors={cutColor:'#ff0000',engraveColor:'#000000'
       files.push({name:`${name}${all.length>1?'-'+(i+1):''}.svg`,data:svgDoc(R.stockW,R.stockH,b.join('\n'),title)});
     });
   };
-  draw(rack.parts,'rack-sheet','Test tube rack parts');
-  if(rack.cover.length)draw(rack.cover,'rack-cover','Rack covers, kept separate so they can be cut from another colour');
+  if(rack.cutParts.length)draw(rack.cutParts,'rack-sheet','Test tube rack parts');
+  if(rack.cutCover.length)draw(rack.cutCover,'rack-cover','Rack covers, kept separate so they can be cut from another colour');
+  for(const it of rack.prints)files.push(printFile({...it,name:'rack '+it.name}));
   return files;
 }
 // holes either side of the chosen size, to find the fit for real tubes

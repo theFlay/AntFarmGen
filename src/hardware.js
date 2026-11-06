@@ -57,9 +57,11 @@ export function coverStand(G,P){
   const z=doorType(P).sizes(G,P);
   return (z?z.stickOpen:6)+2;
 }
-// Upright foot: the bottom edge of the panel drops into its notch.
+// Upright foot: the bottom edge of the panel drops into its notch, so it stands this far up.
+const FOOT_H=20,FOOT_NOTCH=5;
+export const FOOT_LIFT=FOOT_H-FOOT_NOTCH;
 export function footPart(G,P){
-  const thick=2*P.S+G.depth+0.2,L=Math.max(90,Math.round(P.H*0.45)),h=20,d=5;
+  const thick=2*P.S+G.depth+0.2,L=Math.max(90,Math.round(P.H*0.45)),h=FOOT_H,d=FOOT_NOTCH;
   const a=(L-thick)/2,b=a+thick;
   return {name:'foot',w:L,h,poly:[[0,0],[a,0],[a,d],[b,d],[b,0],[L,0],[L,h],[0,h]],holes:[]};
 }

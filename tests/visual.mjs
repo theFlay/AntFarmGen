@@ -13,6 +13,7 @@ await page.waitForFunction(()=>window.__nest);
 await (await page.$('#preview')).screenshot({path:resolve(out,'preview.png')});
 const files=await page.evaluate(()=>{const s=window.__nest.state;return window.__nest.exporters(s.G,s.L,s.P,s.geo).files;});
 for(const f of files){
+  if(typeof f.data!=='string')continue;   // STL prints are binary, with nothing to draw
   writeFileSync(resolve(out,f.name),f.data);
   const svg=f.data.replace(/<\?xml[^>]*>/,'').replace(/width="[\d.]+mm" height="[\d.]+mm"/,'style="width:1400px;height:auto"').replace(/stroke-width="0\.01"/g,'stroke-width="0.25"');
   const p=await browser.newPage({viewport:{width:1400,height:900}});

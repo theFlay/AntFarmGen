@@ -50,7 +50,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .seg button{border:0;background:transparent;padding:5px 10px;border-radius:7px}
 .seg button:hover:not(:disabled){background:var(--card)}
 .seg button.on{background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.14);font-weight:620}
-#rackPreview svg{width:100%;height:auto;display:block;border-radius:8px}
+#rackPreview svg,#outPreview svg{width:100%;height:auto;display:block;border-radius:8px}
 [hidden]{display:none!important}
 #preview svg{width:100%;height:auto;display:block;touch-action:manipulation;margin-top:10px;border-radius:8px}
 .msg{font-size:13px;margin:3px 0}
@@ -81,6 +81,7 @@ footer a{color:var(--accent)}
     <div class="seg" id="modes" role="group" aria-label="What to design">
       <button data-mode="nest" class="on">Nest panel</button>
       <button data-mode="rack">Test tube rack</button>
+      <button data-mode="outworld">Outworld</button>
     </div>
     <span id="pill" class="pill good">Ready to export</span>
   </div>
@@ -98,11 +99,32 @@ footer a{color:var(--accent)}
       <section class="card"><h2>Summary</h2><div id="rackStats" class="stats"></div></section>
     </div>
     <section class="card">
-      <h2>Cut files</h2>
-      <p class="note">Cut the rack from red acrylic so you can watch without disturbing the queens. If it's clear acrylic, use the hood.</p>
+      <h2>Cut and print files</h2>
+      <p class="note">Cut the rack from red acrylic so you can watch without disturbing the queens. If it's clear acrylic, use the hood. Parts set to 3D print under Materials come out as STL files.</p>
       <div class="row" id="rackExports"></div>
       <div class="row" style="margin-top:10px"><button id="rackTest">Hole test strip</button></div>
       <div id="rackStatus" class="msg info"></div>
+    </section>
+  </main>
+</div>
+<div class="wrap" id="outView" hidden>
+  <aside id="outControls" aria-label="Outworld settings"></aside>
+  <main>
+    <section class="card">
+      <h2>Outworld, seen from above</h2>
+      <p class="note">A tabbed box the ants forage in. The port wall faces the nest. Flat nests clamp on with bars through the nest joining slots. Upright nests stand beside it, and edge clips grip the nest at a side port.</p>
+      <div id="outPreview"></div>
+    </section>
+    <div class="two">
+      <section class="card"><h2>Checks</h2><div id="outChecks"></div></section>
+      <section class="card"><h2>Summary</h2><div id="outStats" class="stats"></div></section>
+    </div>
+    <section class="card">
+      <h2>Cut and print files</h2>
+      <p class="note">Cut the box from clear acrylic so you can watch them forage. Docks, clips, bars and bulkhead rings are on their own sheet. Parts set to 3D print under Materials come out as STL files.</p>
+      <div class="row" id="outExports"></div>
+      <div class="row" style="margin-top:10px"><button id="outTest">Tube hole test strip</button></div>
+      <div id="outStatus" class="msg info"></div>
     </section>
   </main>
 </div>
@@ -154,8 +176,8 @@ footer a{color:var(--accent)}
       <section class="card"><h2>Summary</h2><div id="stats" class="stats"></div></section>
     </div>
     <section class="card">
-      <h2>Cut files</h2>
-      <p class="note">SVG at 1:1 in millimetres, with kerf already applied. Red is cut and black is engrave, and you can change both under Export.</p>
+      <h2>Cut and print files</h2>
+      <p class="note">SVG at 1:1 in millimetres, with kerf already applied. Red is cut and black is engrave, and you can change both under Export. Parts set to 3D print under Machines and materials come out as STL files.</p>
       <div class="row" id="exports"></div>
       <div class="row" style="margin-top:10px">
         <button id="testPiece">Fit test piece</button>
