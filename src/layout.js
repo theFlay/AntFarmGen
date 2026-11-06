@@ -7,7 +7,7 @@
  jogH/jogV: sideways step in mm on a solid wall, 0 for none.
 */
 export function emptyLayout(cols,rows){
-  const L={cols,rows,active:[],activeB:[],merges:[],H:[],V:[],diag:[],jogH:[],jogV:[],sensors:[],pillars:[],frost:[],vials:[],reservoirs:[],portsUsed:[]};
+  const L={cols,rows,active:[],activeB:[],merges:[],H:[],V:[],diag:[],jogH:[],jogV:[],sensors:[],pillars:[],frost:[],vials:[],reservoirs:[],portsUsed:[],damp:''};
   for(let r=0;r<rows;r++){
     L.active.push(new Array(cols).fill(true));L.activeB.push(new Array(cols).fill(true));
     L.diag.push(new Array(cols).fill(0));

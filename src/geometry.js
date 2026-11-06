@@ -3,6 +3,7 @@ import {stH,stV,chambers,chamberCenter,unitCenter,interiorEdges,getEdge} from '.
 import {doorType} from './doors.js';
 import {heatOn,heatEntry,heatLayer,borderHeat,borderRow,minHeatBorder} from './heat.js';
 import {spongeLength} from './generate.js';
+import {boltDia,boltHead} from './params.js';
 /* ---------------- geometry ---------------- */
 // Tabs go in the solid runs either side of each tunnel notch, leaving room for a door slot.
 export function tabPositions(len,notches,G,P,tl=P.tabL){
@@ -291,7 +292,8 @@ export function buildGeometry(G,L,P){
   });
   const frame=framePieces(W,H,B,cuts,w);
   // pegs or bolts around the border
-  const fastD=P.fastener==='peg'?P.pegW:P.boltD;
+  const boltHole=boltDia(P);
+  const fastD=P.fastener==='peg'?P.pegW:boltHole;
   const bolts=[];
   const hb=borderRow(P);
   const edgeHeat=borderHeat(P);
@@ -326,7 +328,8 @@ export function buildGeometry(G,L,P){
       else if(side==='left')bolts.push({x:hb,y:pos,along:'y'});else bolts.push({x:W-hb,y:pos,along:'y'});
     }
   }
-  if(P.fastener==='bolt'&&P.boltD>B-4)errors.push(`Bolt holes (${P.boltD}mm) are too big for a ${B}mm border.`);
+  if(P.fastener==='bolt'&&boltHole>B-4)errors.push(`Bolt holes (${boltHole}mm) are too big for a ${B}mm border.`);
+  else if(P.fastener==='bolt'&&boltHead(P)>B-2)warnings.push(`${P.boltSize==='custom'?'These bolt':P.boltSize+' bolt'} heads are about ${f1(boltHead(P))}mm wide, a tight fit on a ${B}mm border.`);
   if(P.fastener==='peg'&&t+2>B-4)errors.push(`Peg slots are too wide for a ${B}mm border.`);
   const fasteners=P.fastener==='cement'?[]:bolts;
   if(P.heatChannel&&!heat)warnings.push('The heat channel is for flat nests only, so it is left out.');

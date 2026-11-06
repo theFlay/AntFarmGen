@@ -1,6 +1,7 @@
 import {fmt} from './util.js';
 import {stH,stV,chambers,unitPoly,isActive} from './layout.js';
 import {polyD} from './offset.js';
+import {boltDia} from './params.js';
 /* ---------------- top-down drawing ---------------- */
 export function drawTopdown(G,L,P,geo,rules,opts){
   const {W,H}=P,{t,xs,ys,cols,rows}=G;
@@ -17,7 +18,7 @@ export function drawTopdown(G,L,P,geo,rules,opts){
   }
   for(const [r,c] of L.reservoirs)o.push(`<rect x="${fmt(xs[c])}" y="${fmt(ys[r])}" width="${fmt(xs[c+1]-xs[c])}" height="${fmt(ys[r+1]-ys[r])}" fill="#7fb8ea"/>`);
   if(opts.interactive&&P.dampSide!=='none'&&P.sponges>0){
-    const g={left:'x1="0" x2="1" y1="0" y2="0"',right:'x1="1" x2="0" y1="0" y2="0"',top:'x1="0" x2="0" y1="0" y2="1"',bottom:'x1="0" x2="0" y1="1" y2="0"'}[P.dampSide];
+    const g={left:'x1="0" x2="1" y1="0" y2="0"',right:'x1="1" x2="0" y1="0" y2="0"',top:'x1="0" x2="0" y1="0" y2="1"',bottom:'x1="0" x2="0" y1="1" y2="0"'}[L.damp||P.dampSide];
     if(g)o.push(`<defs><linearGradient id="damp" ${g}><stop offset="0" stop-color="#4a90d9" stop-opacity="0.22"/><stop offset="1" stop-color="#4a90d9" stop-opacity="0"/></linearGradient></defs><rect x="${fmt(P.B)}" y="${fmt(P.B)}" width="${fmt(W-2*P.B)}" height="${fmt(H-2*P.B)}" fill="url(#damp)"/>`);
   }
   for(const b of geo.sensorBoxes)o.push(`<rect x="${fmt(b.x0)}" y="${fmt(b.y0)}" width="${fmt(b.x1-b.x0)}" height="${fmt(b.y1-b.y0)}" fill="#c9b6e8"/>`);
@@ -49,7 +50,7 @@ export function drawTopdown(G,L,P,geo,rules,opts){
     if(opts.labels)o.push(`<text x="${fmt(horiz?p.pos:(p.side==='left'?-2:W+2))}" y="${fmt(horiz?(p.side==='top'?-1:H+3.5):p.pos)}" font-size="3" text-anchor="${horiz?'middle':(p.side==='left'?'end':'start')}" fill="#333">${p.id}</text>`);
   }
   for(const b of geo.fasteners){
-    if(P.fastener==='bolt'){o.push(`<circle cx="${fmt(b.x)}" cy="${fmt(b.y)}" r="${fmt(P.boltD/2)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);continue;}
+    if(P.fastener==='bolt'){o.push(`<circle cx="${fmt(b.x)}" cy="${fmt(b.y)}" r="${fmt(boltDia(P)/2)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);continue;}
     const hx=(b.along==='x'?P.pegW:t)/2,hy=(b.along==='x'?t:P.pegW)/2;
     o.push(`<rect x="${fmt(b.x-hx)}" y="${fmt(b.y-hy)}" width="${fmt(2*hx)}" height="${fmt(2*hy)}" fill="#fff" stroke="#555" stroke-width="0.4"/>`);
   }
@@ -89,10 +90,18 @@ export function drawTopdown(G,L,P,geo,rules,opts){
     }
     for(const sp of geo.sponges){const pt=sp.orient==='H'?[sp.uc,sp.c]:[sp.c,sp.uc];o.push(`<text x="${fmt(pt[0])}" y="${fmt(pt[1]+0.9)}" font-size="2.6" text-anchor="middle" fill="#fff">${sp.id}</text>`);}
   }
+  // routes between two chosen spots: the best in green, the others in red, the chosen one on top
+  if(opts.route){
+    const {routes,pick,ends}=opts.route;
+    const line=(r,col,w)=>`<path d="M${r.pts.map(v=>fmt(v[0])+' '+fmt(v[1])).join(' L')}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"/>`;
+    routes.forEach((r,i)=>{if(i!==pick)o.push(line(r,i?'#e5484d':'#17a34a',1.6));});
+    if(routes[pick])o.push(line(routes[pick],'#fff',4.2),line(routes[pick],pick?'#e5484d':'#17a34a',2.8));
+    for(const [x,y] of ends)o.push(`<circle cx="${fmt(x)}" cy="${fmt(y)}" r="4" fill="#17a34a" stroke="#fff" stroke-width="1.2"/>`);
+  }
   if(opts.interactive){
     // hit areas
     for(const u of units)o.push(`<path data-cell="${u.slice(0,3).filter(v=>v!==undefined).join(',')}" d="${polyD(unitPoly(G,u))}" fill="transparent"/>`);
-    if(opts.tool==='port')for(const p of geo.ports){
+    if(opts.tool==='port'||opts.tool==='route')for(const p of geo.ports){
       if(!p.cut)continue;
       const horiz=p.side==='top'||p.side==='bottom',tw2=G.tunnelW;
       const r=horiz?[p.pos-tw2/2,p.side==='top'?0:H-P.B,tw2,P.B]:[p.side==='left'?0:W-P.B,p.pos-tw2/2,P.B,tw2];

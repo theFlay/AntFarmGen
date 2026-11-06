@@ -204,6 +204,34 @@ await check('a saved layout loads back exactly, including angled shapes',async p
   await p.waitForTimeout(300);
   assert.deepEqual(JSON.parse(await Ljson(p)),JSON.parse(before));
 });
+await check('route tool shows routes between two spots and cycles them',async p=>{
+  await setField(p,'p_loops',0.5);
+  await p.click('[data-tool="route"]');
+  const [a,z]=await p.evaluate(()=>{const l=window.__nest.state.geo.ch.list;return [l[0].cells[0],l[l.length-1].cells[0]];});
+  await clickSvg(p,`[data-cell="${a[0]},${a[1]}"]`);
+  await clickSvg(p,`[data-cell="${z[0]},${z[1]}"]`);
+  assert.match(await p.textContent('#toolhelp'),/^Route 1 of \d/);
+  assert.ok(await p.$('#preview path[stroke="#17a34a"]'),'best route is green');
+  await p.click('#routeNext');
+  assert.match(await p.textContent('#toolhelp'),/^Route 2 of \d/);
+  assert.ok(await p.$('#preview path[stroke="#e5484d"]'),'other routes are red');
+  await p.click('[data-tool="wall"]');
+  assert.equal(await p.$('#preview path[stroke="#17a34a"]'),null,'leaving the tool clears it');
+  assert.equal(await p.$eval('#routeNext',e=>e.hidden),true);
+});
+await check('bolt size changes the hole and the summary',async p=>{
+  await setField(p,'p_fastener','bolt');
+  await setField(p,'p_boltSize','M5');
+  assert.equal(await p.$eval('#preview circle[fill="#fff"]',e=>e.getAttribute('r')),'2.75');
+  assert.match(await p.textContent('#stats'),/M5 bolts, \d+mm or longer/);
+});
+await check('old layout files keep the bolt hole they were saved with',async p=>{
+  const file=await p.evaluate(()=>{const s=window.__nest.state,P={...s.P,fastener:'bolt',boltD:6.1};delete P.boltSize;return JSON.stringify({app:'x',version:2,params:P,layout:s.L});});
+  await p.setInputFiles('#loadLayout',{name:'old.json',mimeType:'application/json',buffer:Buffer.from(file)});
+  await p.waitForTimeout(300);
+  assert.equal(await p.evaluate(()=>window.__nest.state.P.boltSize),'custom');
+  assert.equal(await p.$eval('#preview circle[fill="#fff"]',e=>e.getAttribute('r')),'3.05');
+});
 await check('zip export works with no network',async p=>{
   const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#zipAll')]);
   assert.match(dl.suggestedFilename(),/\.zip$/);

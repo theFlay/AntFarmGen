@@ -28,12 +28,13 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 ## Features built
 
 **Nest panel**
-- Grid from panel and ant sizes, seeded auto layout, and manual tools: Walls, Starting area, Brood, Join, Diagonal, Jog, Sensor, Pillar, Frost, Water, Ports.
+- Grid from panel and ant sizes, seeded auto layout, and manual tools: Walls, Starting area, Brood, Join, Diagonal, Jog, Sensor, Pillar, Frost, Water, Ports, Route.
+- Tunnel layout: branch out from the brood (default) or a random maze. Route shows the best way between two chambers or ports in green, with alternatives in red.
 - Rules that gate export: connected nest, 1 to 3 tunnels per chamber, at most 2 sponges per chamber, no lone triangles, and the starting area must hold a port, a sponge and a brood chamber.
 - Flat or upright orientation, which sets the service side: top sheet (flat) or back sheet (upright).
 - A door on every tunnel. Doors replace sealed chambers: everything is cut, and the starting area only sets which doors start closed.
 - Odd-shaped chambers. Diagonal walls, wall jogs and chamfers sit behind the "Use angled shapes" toggle, off by default, because those joints need cement.
-- Fastening: acrylic pegs and wedge keys by default, or bolts, or cement only.
+- Fastening: acrylic pegs and wedge keys by default, or bolts (M2 to M8, or a custom hole), or cement only.
 - Port plugs, upright feet, sand lips on upright floor tunnels, panel joiners on a fixed grid, whole-panel red cover.
 - Sponge pockets, sensor pockets, support pillars, water vial holders (flat), water chambers (upright).
 - Frosting for floor, ceiling and walls, as separate engrave files, whole or by chosen cells.
@@ -57,11 +58,18 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 - **Sensor pockets** open through the service sheet, not always the back.
 - **Pillars** are short tabbed posts, not rods, to stay all acrylic.
 - **Saddles** stay on upright nests, held by friction only. Add a positive lock if the fit test shows it is needed.
+- **Frame layers** only build the outer border, as stacked rings. Inner walls are already single strips at 90 degrees to the sheets.
+- **Branching tunnels:** each chamber joins its least busy neighbour one step closer to the brood. A tree is already the fewest doors that can connect every chamber, so only loops add more. Loops go between chambers that are far apart along the tunnels.
+- **Starting area:** it starts at the brood chamber, which is placed where the area grows from and given its own port where possible, then takes the nearest port along the tunnels. Starting from a nearby port chamber instead made it far too big. Rules warn if it ends up bigger than asked.
+- **Sponges** favour one side so the ants get a damp end and a dry end, and are kept apart where there is room.
+- **Panel joiners** stand about 4.7mm proud, so a cover passes over them. Rules warn if the cover gap is too low.
 
 ## Not built
 
 - Connectors to an outworld and a custom Exo Terra lid (waiting on a tube size).
 - More door types. `src/doors.js` is set up for them.
+- An outer wall made of single strips instead of stacked frame layers. The owner leans towards strips with small stacked spacer blocks at each peg or bolt, as an option and the default, with stacked layers kept for border heat. Still to agree: how ports and plugs work through a 3mm wall.
+- A long corridor chamber (highway). It would need an exception to the 3 tunnel limit, and pillars to stop the sheets bowing.
 - Covers per section or per chamber.
 - Comments shown on the page itself. Feedback goes through GitHub Issues and Discussions.
 
@@ -81,7 +89,7 @@ node tests/live.mjs "text on the page"   # checks the live site
 
 - Edit `src/`, then run `npm run build`. Never edit `index.html` by hand.
 - Every push to `develop` is tested by `.github/workflows/pages.yml`, and only goes live if the tests pass.
-- Current state: 140 unit tests plus the browser tests, all passing.
+- Current state: 162 unit tests plus the browser tests, all passing.
 - After a change, look at rendered output as well as the tests. Several real bugs were only found that way.
 
 ## Project rules

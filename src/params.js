@@ -1,3 +1,7 @@
+// clearance hole and socket head diameter for each metric bolt, in mm
+export const BOLTS={M2:[2.4,3.8],'M2.5':[2.9,4.5],M3:[3.4,5.5],M4:[4.5,7],M5:[5.5,8.5],M6:[6.6,10],M8:[9,13]};
+export const boltDia=P=>P.boltSize==='custom'||!BOLTS[P.boltSize]?P.boltD:BOLTS[P.boltSize][0];
+export const boltHead=P=>P.boltSize==='custom'||!BOLTS[P.boltSize]?P.boltD*1.6:BOLTS[P.boltSize][1];
 export const PARAMS=[
  ['Panel',true,[
   {k:'W',l:'Panel width (mm)',d:400},
@@ -8,9 +12,10 @@ export const PARAMS=[
   {k:'orient',l:'Nest orientation',d:'flat',opts:[['flat','Flat (table)'],['upright','Upright (shelf)']],h:'Flat: viewed from the top. Upright: viewed from both faces. Doors and fill holes go on the top sheet (flat) or back sheet (upright).'},
   {k:'doorType',l:'Door type',d:'slide',opts:[['slide','A: sliding door'],['none','None (open tunnels)']]},
   {k:'fastener',l:'Hold together with',d:'peg',opts:[['peg','Acrylic pegs and keys'],['bolt','Bolts'],['cement','Cement only']]},
+  {k:'boltSize',l:'Bolt size',d:'M3',opts:[...Object.keys(BOLTS).map(k=>[k,k]),['custom','Custom hole']],h:'Only used with bolts. Sets a clearance hole for that size.'},
   {k:'coverType',l:'Red cover',d:'whole',opts:[['whole','Whole panel'],['none','None']]},
   {k:'joinSlots',l:'Slots for joining panels',d:true,bool:true,h:'Cut on a fixed grid, so any two panels line up.'},
-  {k:'joinerQty',l:'Panel joiners to cut',d:0,step:1,h:'Clips that hold two panels together. Each one uses 2 keys.'},
+  {k:'joinerQty',l:'Panel joiners to cut',d:0,step:1,h:'Extra clips for joining two panels. They are added to the parts sheets, not the preview. Each one uses 2 keys.'},
  ]],
  ['Ants',true,[
   {k:'sizeFor',l:'Size for',d:'both',opts:[['workers','Workers'],['queens','Queens'],['both','Both']],h:'Chambers follow worker length (queen length if Queens). Tunnels follow queen width when given.'},
@@ -38,7 +43,7 @@ export const PARAMS=[
  ['Ports and bolts',false,[
   {k:'portPitch',l:'Port spacing (mm)',d:100},
   {k:'portOffset',l:'Port offset from corner (mm)',d:50},
-  {k:'boltD',l:'Bolt hole diameter (mm)',d:3.4,step:0.1,h:'Only used with bolts.'},
+  {k:'boltD',l:'Custom bolt hole diameter (mm)',d:3.4,step:0.1,h:'Only used when Bolt size is Custom hole.'},
   {k:'boltSpacing',l:'Max peg or bolt spacing (mm)',d:60},
  ]],
  ['Sponges and vents',false,[
@@ -81,11 +86,12 @@ export const PARAMS=[
   {k:'brood',l:'Brood chambers (2x2)',d:1,step:1},
   {k:'oddShare',l:'Odd-shaped chambers (0 to 1)',d:0,step:0.05,h:'Share of cells joined into odd shapes like 1x2, L and T.'},
   {k:'oddMax',l:'Largest odd chamber (cells)',d:4,step:1},
-  {k:'activeCount',l:'Chambers open at the start (0 = all)',d:0,step:1,h:'Everything is cut either way. The rest start behind closed doors.'},
+  {k:'activeCount',l:'Chambers open at the start (0 = all)',d:0,step:1,h:'Everything is cut either way. The rest start behind closed doors. Must be above 0 for the setting below to do anything.'},
   {k:'growFrom',l:'Starting area grows from',d:'left',opts:[['left','Left'],['right','Right'],['top','Top'],['bottom','Bottom'],['center','Centre']]},
-  {k:'loops',l:'Extra loop tunnels (0 to 1)',d:0.15,step:0.05},
+  {k:'tunnelStyle',l:'Tunnel layout',d:'branch',opts:[['branch','Branch out from the brood'],['maze','Random maze']],h:'Branching gives every chamber the shortest way back to the brood chamber. A maze is longer and more winding.'},
+  {k:'loops',l:'Extra loop tunnels (0 to 1)',d:0.1,step:0.05,h:'Each one adds a door and a second way round.'},
   {k:'sponges',l:'Sponges',d:3,step:1},
-  {k:'dampSide',l:'Damp side',d:'left',opts:[['left','Left'],['right','Right'],['top','Top'],['bottom','Bottom'],['none','None (spread)']]},
+  {k:'dampSide',l:'Damp side',d:'random',opts:[['random','Random side'],['left','Left'],['right','Right'],['top','Top'],['bottom','Bottom'],['none','None (spread)']],h:'Sponges favour one side, so the ants get a damp end and a dry end. They are kept apart where there is room.'},
  ]],
  ['Angled shapes (need glue)',false,[
   {k:'angled',l:'Use angled shapes',d:false,bool:true,h:'Off keeps the nest a pure jigsaw. On adds diagonal walls and jogs, whose joints must be sealed with acrylic cement and sand.'},
@@ -104,7 +110,7 @@ export const PARAMS=[
   {k:'engraveIds',l:'Engrave part IDs',d:true,bool:true},
  ]],
 ];
-export const GEN_KEYS=new Set(['chamfer','broodPillar','seed','brood','oddShare','oddMax','angled','diagShare','jogShare','jogSize','activeCount','growFrom','loops','sponges','dampSide']);
+export const GEN_KEYS=new Set(['chamfer','broodPillar','seed','brood','oddShare','oddMax','angled','diagShare','jogShare','jogSize','activeCount','growFrom','tunnelStyle','loops','sponges','dampSide']);
 export // sane limits, which also stop a bad value from freezing the page
 const RANGES={W:[60,3000],H:[60,3000],B:[5,100],workerLen:[1,100],queenLen:[1,100],queenWidth:[1,100],pitchFactor:[1,10],tunnelW:[1,100],
   t:[0.5,20],layers:[1,20],S:[0.5,20],tunnelH:[1,200],tabL:[2,100],tabPitch:[5,500],kerf:[0,2],slotClear:[-2,2],doorFit:[0,2],doorGrip:[3,30],

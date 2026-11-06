@@ -59,6 +59,7 @@ export function cleanLayout(l,G){
     reservoirs:cellList(l.reservoirs,'reservoirs'),
     vials:edgeList(l.vials),
     portsUsed:portList(l.portsUsed),
+    damp:['left','right','top','bottom','none'].includes(l.damp)?l.damp:'',
     merges:l.merges.map(m=>{
       if(!m||!Array.isArray(m.cells)||m.cells.length<2||m.cells.length>cols*rows*2)fail('bad chamber group');
       return {cells:m.cells.map(cell),brood:m.brood===true};

@@ -1,6 +1,7 @@
 import {interiorEdges,getEdge} from './layout.js';
 import {spongeLength} from './generate.js';
 import {heatFrameLayers} from './heat.js';
+import {coverStand,JOINER_RISE} from './hardware.js';
 
 /* Every chamber must join the whole nest. The starting area is the open part on day one:
    closed doors separate it from the rest, so it must work on its own. */
@@ -78,6 +79,9 @@ export function checkRules(G,L,P,geo){
     if(ph<G.tunnelH)msgs.push(['warn',`Ports are only ${ph}mm tall above the heat layer, lower than the ${G.tunnelH}mm tunnels.`]);
     msgs.push(['info',`Border heat: the groove takes cable up to ${P.heatEdgeW}mm wide and ${heatFrameLayers(P)*G.t}mm deep. Always use a thermostat.`]);
   }
+  if(P.joinerQty>0&&!geo.joints.length)msgs.push(['warn','Panel joiners need Slots for joining panels on, and a border of at least 12mm.']);
+  if(P.coverType==='whole'&&geo.joints.length&&coverStand(G,P)<JOINER_RISE+1)msgs.push(['warn',`A ${coverStand(G,P)}mm cover gap is too low to clear panel joiners, which stick up about ${JOINER_RISE}mm.`]);
+  if(P.activeCount>0&&act.length>P.activeCount)msgs.push(['warn',`The starting area has ${act.length} chambers, more than the ${P.activeCount} set under Auto layout. It must hold a port, a sponge and a brood chamber, and the Starting area tool can also change it.`]);
   const BEDS={speedy300:[737,432,'Speedy 300'],speedy360:[813,508,'Speedy 360']},bed=BEDS[P.bed];
   if(bed){
     const fits=(w,h)=>(w<=bed[0]&&h<=bed[1])||(w<=bed[1]&&h<=bed[0]);

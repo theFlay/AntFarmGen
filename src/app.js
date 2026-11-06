@@ -1,7 +1,7 @@
 import {PARAMS,GEN_KEYS,ALL_FIELDS} from './params.js';
 import {f1} from './util.js';
 import {derive} from './grid.js';
-import {chambers,interiorEdges,getEdge,setEdge,mergeOf,broodCells,normalizeLayout,addDiagonal,removeDiagonal,setActive} from './layout.js';
+import {chambers,chamberCenter,interiorEdges,getEdge,setEdge,mergeOf,broodCells,normalizeLayout,addDiagonal,removeDiagonal,setActive} from './layout.js';
 import {generate} from './generate.js';
 import {buildGeometry} from './geometry.js';
 import {checkRules} from './rules.js';
@@ -9,6 +9,8 @@ import {offsetPoly} from './offset.js';
 import {stripOutline} from './strip.js';
 import {drawTopdown} from './draw.js';
 import {exporters,testPiece} from './export.js';
+import {boltLength} from './hardware.js';
+import {findRoutes} from './routes.js';
 import {portCells} from './generate.js';
 import {cleanLayout,cleanParam,escapeHtml} from './sanitize.js';
 import JSZip from 'jszip';
@@ -55,6 +57,8 @@ function readParams(){
 }
 /* ---------------- app state ---------------- */
 let P,G,L,geo,rules,tool='wall',history=[],joinFrom=null;
+// the Route tool: up to two picked spots, each a chamber id with a point to mark, and the route on show
+let routeEnds=[],routePick=0;
 const TOOLHELP={
   wall:'Tap a wall to cycle solid, tunnel, sponge.',
   cell:'Tap a chamber to add it to, or remove it from, the starting area. Everything is still cut; this only sets which doors start closed.',
@@ -66,10 +70,24 @@ const TOOLHELP={
   pillar:'Tap a cell to add or remove a support pillar.',
   frost:'Tap a cell to add or remove frosting. Set a sheet to Chosen cells under Frosting.',
   water:'Flat nests: tap a sponge wall to add a water vial holder. Upright nests: tap the cell above a sponge to make it a water chamber.',
-  port:'Tap a port to mark it in use. Ports not in use get a plug.'
+  port:'Tap a port to mark it in use. Ports not in use get a plug.',
+  route:'Tap two chambers or ports to see how ants get between them. The best route is green and the others are red.'
 };
 function snapshot(p=P){history.push(JSON.stringify({L,P:p}));if(history.length>60)history.shift();}
-function regenerate(prev=P){if(L)snapshot(prev);G=derive(P);L=generate(G,P);}
+function regenerate(prev=P){if(L)snapshot(prev);G=derive(P);L=generate(G,P);routeEnds=[];}
+function currentRoutes(){
+  if(tool!=='route'||routeEnds.length<2)return [];
+  return findRoutes(G,L,geo.ch,routeEnds[0].id,routeEnds[1].id);
+}
+function routeNote(routes){
+  if(tool!=='route'||routeEnds.length<2)return '';
+  if(routeEnds[0].id===routeEnds[1].id)return 'Both spots are in the same chamber.';
+  if(!routes.length)return 'No tunnels join those two spots.';
+  const r=routes[routePick],doors=r.ids.length-1;
+  const shut=r.closed?`, ${r.closed} of them closed at the start`:'';
+  const more=routes.length>1?'':' It is the only way, as no loop tunnels join this part.';
+  return `Route ${routePick+1} of ${routes.length}: ${f1(r.mm)}mm through ${doors} door${doors===1?'':'s'}${shut}.${more}`;
+}
 function onParamChange(k){
   const prev=P;
   P=readParams();
@@ -82,8 +100,12 @@ function render(){
   if(!L||L.cols!==G.cols||L.rows!==G.rows){L=generate(G,P);}
   geo=buildGeometry(G,L,P);
   rules=checkRules(G,L,P,geo);
-  document.getElementById('preview').innerHTML=drawTopdown(G,L,P,geo,rules,{interactive:true,tool});
-  document.getElementById('toolhelp').textContent=TOOLHELP[tool];
+  const routes=currentRoutes();
+  if(routePick>=routes.length)routePick=0;
+  const route=tool==='route'&&routeEnds.length?{routes,pick:routePick,ends:routeEnds.map(e=>e.at)}:null;
+  document.getElementById('preview').innerHTML=drawTopdown(G,L,P,geo,rules,{interactive:true,tool,route});
+  document.getElementById('toolhelp').textContent=routeNote(routes)||TOOLHELP[tool];
+  document.getElementById('routeNext').hidden=routes.length<2;
   document.getElementById('checks').innerHTML=rules.msgs.map(([lv,m])=>`<div class="msg ${lv}">${escapeHtml(m)}</div>`).join('');
   const act=geo.ch.list.filter(c=>c.active);
   let tunnels=0,spongesN=0;
@@ -96,7 +118,7 @@ function render(){
     ['Tunnels',`${f1(G.tunnelW)} wide x ${f1(G.tunnelH)} high`],['Open at start',`${act.length} of ${geo.ch.list.length} chambers`],
     ['Tunnels / sponges',`${tunnels} / ${spongesN}`],['Strip parts',`${geo.pieces.length} (${f1(stripLen/1000)} m)`],
     ['Wall sheets',`${ex.stripSheets} at ${P.stockW} x ${P.stockH}`],['Frame',`${geo.frame.length} pieces x ${P.layers} layers`],
-    ['Ports that always line up',lineUp()],['Doors',`${geo.doors.length} (${geo.doors.filter(d=>d.closed).length} start closed)`],['Fasteners',`${geo.fasteners.length} ${P.fastener==='peg'?'pegs and keys':P.fastener==='bolt'?'bolts':''}`],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
+    ['Ports that always line up',lineUp()],['Doors',`${geo.doors.length} (${geo.doors.filter(d=>d.closed).length} start closed)`],['Fasteners',`${geo.fasteners.length} ${P.fastener==='peg'?'pegs and keys':P.fastener==='bolt'?`${P.boltSize==='custom'?'':P.boltSize+' '}bolts, ${boltLength(G,P)}mm or longer`:''}`],['Panel joiners',geo.joints.length?`${Math.round(P.joinerQty||0)} clips, ${geo.joints.length} slots`:'no slots'],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
   ];
   document.getElementById('stats').innerHTML=st.map(([a,b])=>`<div${a.startsWith('Ports that')?' class="wide"':''}><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
   document.getElementById('derived').textContent=`Pitch target ${f1(G.pitch)}mm, actual cells ${f1(G.cellW)} x ${f1(G.cellH)}mm, tunnels ${f1(G.tunnelW)}mm wide, depth ${f1(G.depth)}mm.${G.adjusted?' Cell count nudged so ports miss the walls.':''}`;
@@ -124,6 +146,23 @@ function setStatus(s){document.getElementById('status').textContent=s;const r=do
 /* ---------------- editing ---------------- */
 function onPreviewClick(ev){
   const el=ev.target.closest('[data-port],[data-edge],[data-cell]');if(!el)return;
+  if(tool==='route'){
+    let spot=null;
+    if(el.dataset.port){
+      const p=geo.ports.find(q=>q.key===el.dataset.port);
+      if(p){
+        const horiz=p.side==='top'||p.side==='bottom';
+        spot={id:p.chamber,at:horiz?[p.pos,p.side==='top'?P.B/2:P.H-P.B/2]:[p.side==='left'?P.B/2:P.W-P.B/2,p.pos]};
+      }
+    }else if(el.dataset.cell){
+      const [r,c,h]=el.dataset.cell.split(',');
+      const id=geo.ch.of(+r,+c,h);
+      spot={id,at:chamberCenter(G,geo.ch.list[id])};
+    }
+    if(!spot)return;
+    routeEnds=routeEnds.length===1?[routeEnds[0],spot]:[spot];
+    routePick=0;render();return;
+  }
   if(tool==='port'){
     if(!el.dataset.port)return;
     snapshot();
@@ -327,10 +366,11 @@ function init(){
     const f=rackFilesNow[+b.dataset.rack];if(f)await saveFile(f.name,f.data);
   });
   document.querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>{
-    tool=b.dataset.tool;joinFrom=null;document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x===b));render();
+    tool=b.dataset.tool;joinFrom=null;routeEnds=[];document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x===b));render();
   }));
+  document.getElementById('routeNext').addEventListener('click',()=>{routePick++;if(routePick>=currentRoutes().length)routePick=0;render();});
   document.getElementById('undo').addEventListener('click',()=>{if(!history.length){setStatus('Nothing to undo.');return;}const h=JSON.parse(history.pop());
-    L=h.L;P=h.P;for(const f of ALL_FIELDS)setField(f,P[f.k]);render();});
+    routeEnds=[];L=h.L;P=h.P;for(const f of ALL_FIELDS)setField(f,P[f.k]);render();});
   document.getElementById('regen').addEventListener('click',()=>{P=readParams();regenerate();render();});
   document.getElementById('reseed').addEventListener('click',()=>{
     const f=ALL_FIELDS.find(x=>x.k==='seed');setField(f,Math.floor(Math.random()*100000));P=readParams();regenerate();render();
@@ -359,10 +399,12 @@ function init(){
       if(!j.layout||!j.params)throw new Error('not a layout file');
       if(typeof j.params!=='object')throw new Error('settings are missing');
       const np=Object.fromEntries(ALL_FIELDS.map(f=>[f.k,f.k in j.params?cleanParam(f,j.params[f.k]):P[f.k]]));
+      // files from before bolt sizes keep the hole they were saved with
+      if(!('boltSize' in j.params)&&'boltD' in j.params)np.boltSize='custom';
       const clean=cleanLayout(normalizeLayout(j.layout),derive(np));
       snapshot();
       for(const f of ALL_FIELDS)setField(f,np[f.k]);
-      P=readParams();L=clean;render();setStatus('Loaded '+file.name+'.');
+      P=readParams();L=clean;routeEnds=[];render();setStatus('Loaded '+file.name+'.');
     }catch(e){setStatus('Could not load: '+e.message);}
     fi.value='';
   });

@@ -3,6 +3,7 @@
 import {rectPts} from './util.js';
 import {doorType} from './doors.js';
 import {heatDepth,heatFrameLayers,borderRow} from './heat.js';
+import {boltDia} from './params.js';
 
 export const PEG_FIT=0.1;
 
@@ -22,6 +23,8 @@ export function keyPart(){
 }
 // Panel joiner: a clip whose two legs drop through joiner slots in neighbouring panels.
 export const JOIN_LEG=8;
+// how far a joiner stands off a face: its 2.7mm key slot plus 2mm of tip, or its 4mm bar
+export const JOINER_RISE=4.7;
 export function joinerPart(G,P){
   const stack=2*P.S+G.depth+heatDepth(G,P),leg=JOIN_LEG,hb=borderRow(P),w=2*hb+leg,bar=4,end=bar+stack+2.7+2,y=bar+stack,kw=G.t+0.2,kh=2.7;
   const hole=x=>rectPts(x-kw/2,y,x+kw/2,y+kh);
@@ -29,6 +32,8 @@ export function joinerPart(G,P){
     poly:[[0,0],[w,0],[w,end],[w-leg,end],[w-leg,bar],[leg,bar],[leg,end],[0,end]],
     holes:[hole(leg/2),hole(w-leg/2)]};
 }
+// Shortest bolt that clears the whole stack with room for a washer and nut, to the next 5mm.
+export function boltLength(G,P){return Math.ceil((2*P.S+G.depth+heatDepth(G,P)+1.5*boltDia(P))/5)*5;}
 // Port plug: a stack of T-shaped layers tied by one pin.
 export function plugPart(G,P){
   const fit=0.1,w=G.tunnelW-2*fit,head=G.tunnelW+6,headH=3,L=headH+P.B;

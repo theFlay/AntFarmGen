@@ -8,7 +8,8 @@ import {cleanLayout} from '../../src/sanitize.js';
 import {stH,stV} from '../../src/layout.js';
 
 const copy=o=>JSON.parse(JSON.stringify(o));
-const CLEAR={brood:0,sponges:0,loops:0};
+// the maze layout, as sensorCell only looks for a solid top left corner
+const CLEAR={brood:0,sponges:0,loops:0,tunnelStyle:'maze'};
 // finds a cell with two solid walls meeting at a corner
 function sensorCell(r){
   const {L,G}=r;

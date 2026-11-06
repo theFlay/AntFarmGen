@@ -10,7 +10,18 @@ export function generate(G,P){
   const L=emptyLayout(G.cols,G.rows);
   const want=Math.max(0,Math.round(P.brood||0));
   if(G.cols>=2&&G.rows>=2){
-    for(let n=0,tries=0;n<want&&tries<400;tries++){
+    // the starting area must hold a brood chamber, so the first one goes where that area grows from
+    if(want>0&&P.activeCount>0){
+      const [tx,ty]=growPoint(P),spots=[];
+      for(let r=0;r<G.rows-1;r++)for(let c=0;c<G.cols-1;c++)spots.push({r,c,d:(G.xs[c+1]-tx)**2+(G.ys[r+1]-ty)**2});
+      spots.sort((a,b)=>a.d-b.d);
+      // a brood chamber with its own port lets the starting area be as small as one chamber
+      const ports=portCells(G,P),holdsPort=s=>ports.some(p=>broodCells(s.r,s.c).some(([a,b])=>a===p.cell[0]&&b===p.cell[1]));
+      const near=spots.slice(0,6),withPort=near.filter(holdsPort);
+      const s=pick(withPort.length?withPort:near.slice(0,3));
+      L.merges.push({cells:broodCells(s.r,s.c),brood:true});
+    }
+    for(let n=L.merges.length,tries=0;n<want&&tries<400;tries++){
       const r=Math.floor(rnd()*(G.rows-1)),c=Math.floor(rnd()*(G.cols-1));
       if(broodCells(r,c).some(([a,b])=>mergeOf(L,a,b)>=0))continue;
       L.merges.push({cells:broodCells(r,c),brood:true});n++;
@@ -23,7 +34,7 @@ export function generate(G,P){
   let ch,adj,ids,deg,done;
   for(;;){
     ch=chambers(L);adj=adjacency(L,ch);ids=ch.list.map(c=>c.id);
-    done=buildTree(G,L,ids,adj,pick);
+    done=buildTree(G,L,ids,adj,pick,P.tunnelStyle==='maze'?null:rootChamber(G,P,ch,pick));
     const split=[];for(let r=0;r<G.rows;r++)for(let c=0;c<G.cols;c++)if(L.diag[r][c])split.push([r,c]);
     if(done.ok||!split.length)break;
     removeDiagonal(L,...pick(split));
@@ -33,6 +44,11 @@ export function generate(G,P){
   const extra=Math.round(Math.max(0,P.loops||0)*ids.length);
   const pairs=[];for(const a of ids)for(const [b,es] of adj.get(a))if(a<b)pairs.push([a,b,es]);
   shuffle(pairs,rnd);let added=0;
+  // when branching, a loop is worth most between chambers that are far apart along the tunnels
+  if(P.tunnelStyle!=='maze'){
+    const g=tunnelGraph(L,ch),hops=new Map(ids.map(i=>[i,hopsFrom(g,i)]));
+    pairs.sort((x,y)=>hops.get(y[0]).get(y[1])-hops.get(x[0]).get(x[1]));
+  }
   for(const [a,b,es] of pairs){
     if(added>=extra)break;
     if(deg.get(a)>=3||deg.get(b)>=3)continue;
@@ -47,8 +63,45 @@ export function generate(G,P){
   if(P.broodPillar)for(const c of ch.list)if(c.brood)L.pillars.push(c.cells[0].slice(0,2));
   return L;
 }
+// where the starting area grows from, in mm
+function growPoint(P){
+  return {left:[P.B,P.H/2],right:[P.W-P.B,P.H/2],top:[P.W/2,P.B],bottom:[P.W/2,P.H-P.B],center:[P.W/2,P.H/2]}[P.growFrom]||[P.W/2,P.H/2];
+}
+// tunnels branch out from a brood chamber, or from where the nest starts if it has none
+function rootChamber(G,P,ch,pick){
+  const brood=ch.list.filter(c=>c.brood),pool=brood.length?brood:ch.list;
+  if(!(P.activeCount>0))return brood.length?brood[0].id:pick(pool).id;
+  const [tx,ty]=growPoint(P),dist=c=>{const [x,y]=chamberCenter(G,c);return (x-tx)**2+(y-ty)**2;};
+  return pool.slice().sort((a,b)=>dist(a)-dist(b))[0].id;
+}
+// hops from one chamber to every other, over a map of each chamber's neighbours
+function hopsFrom(g,from){
+  const d=new Map([[from,0]]),q=[from];
+  while(q.length){
+    const a=q.shift(),near=g.get(a);
+    for(const b of near instanceof Map?near.keys():near)if(!d.has(b)){d.set(b,d.get(a)+1);q.push(b);}
+  }
+  return d;
+}
+// Every chamber joins a neighbour one step closer to the root, so its way home is as short as
+// the walls allow. The least busy neighbour wins, which spreads the doors out evenly.
+function branchOut(L,ids,adj,root,deg,cap,inT,pick){
+  const d=hopsFrom(adj,root);
+  const far=Math.max(...d.values());
+  for(let ring=1;ring<=far;ring++){
+    const todo=ids.filter(i=>d.get(i)===ring);
+    while(todo.length){
+      const b=todo.splice(pick(todo.map((_,i)=>i)),1)[0];
+      const up=[...adj.get(b)].filter(([a])=>d.get(a)===ring-1&&inT.has(a)&&deg.get(a)<cap);
+      if(!up.length)continue;
+      const low=Math.min(...up.map(([a])=>deg.get(a)));
+      const [a,es]=pick(up.filter(([x])=>deg.get(x)===low));
+      setEdge(L,pick(es),'tunnel');deg.set(a,deg.get(a)+1);deg.set(b,deg.get(b)+1);inT.add(b);
+    }
+  }
+}
 // spanning tree with at most 3 tunnels per chamber, relaxed only when no diagonals are left to drop
-function buildTree(G,L,ids,adj,pick){
+function buildTree(G,L,ids,adj,pick,root=null){
   const relax=!L.diag.some(row=>row.some(Boolean));
   let deg=new Map(),done=false;
   for(let attempt=0;attempt<60&&!done;attempt++){
@@ -56,7 +109,9 @@ function buildTree(G,L,ids,adj,pick){
     for(let j=0;j<=G.rows;j++)L.H[j].fill('solid');
     for(let r=0;r<G.rows;r++)L.V[r].fill('solid');
     deg=new Map(ids.map(i=>[i,0]));
-    const inT=new Set([pick(ids)]);
+    const inT=new Set([root??pick(ids)]);
+    if(root!==null)branchOut(L,ids,adj,root,deg,cap,inT,pick);
+    // a random maze, and anything branching could not reach
     while(inT.size<ids.length){
       const cand=[];
       for(const a of inT){if(deg.get(a)>=cap)continue;for(const [b,es] of adj.get(a))if(!inT.has(b)&&deg.get(b)<cap)cand.push([a,b,es]);}
@@ -155,15 +210,17 @@ function startArea(G,P,L,ch,rnd,pick){
   const total=ch.list.length,ac=Math.round(P.activeCount||0);
   if(!(ac>0&&ac<total))return new Set(ch.list.map(c=>c.id));
   const g=tunnelGraph(L,ch);
-  const tgt={left:[P.B,P.H/2],right:[P.W-P.B,P.H/2],top:[P.W/2,P.B],bottom:[P.W/2,P.H-P.B],center:[P.W/2,P.H/2]}[P.growFrom]||[P.W/2,P.H/2];
+  const tgt=growPoint(P);
   const dist=c=>{const [x,y]=chamberCenter(G,c);return (x-tgt[0])**2+(y-tgt[1])**2;};
   const portCh=new Set(portCells(G,P).map(p=>ch.at(p.cell[0],p.cell[1],p.side)));
   const pool=P.growFrom!=='center'&&portCh.size?ch.list.filter(c=>portCh.has(c.id)):ch.list;
-  const seed=pool.slice().sort((a,b)=>dist(a)-dist(b))[0];
+  const brood=ch.list.filter(c=>c.brood).sort((a,b)=>dist(a)-dist(b));
+  // Start at the brood chamber and take the nearest port along the tunnels. A port chamber that
+  // is merely close by can be a long walk from the brood, which made the area far too big.
+  const seed=brood[0]||pool.slice().sort((a,b)=>dist(a)-dist(b))[0];
   const set=new Set([seed.id]);
   const addPath=t=>{const p=pathTo(g,set,t);if(p)for(const x of p)set.add(x);};
   if(portCh.size&&!portCh.has(seed.id))addPath(portCh);
-  const brood=ch.list.filter(c=>c.brood).sort((a,b)=>dist(a)-dist(b));
   brood.forEach((b,i)=>{
     if(set.has(b.id))return;
     const p=pathTo(g,set,new Set([b.id]));
@@ -171,13 +228,16 @@ function startArea(G,P,L,ch,rnd,pick){
   });
   while(set.size<ac){
     const front=[];for(const a of set)for(const b of g.get(a))if(!set.has(b))front.push(b);
-    if(!front.length)break;set.add(pick(front));
+    if(!front.length)break;
+    set.add(front.sort((a,b)=>dist(ch.list[a])-dist(ch.list[b]))[0]);
   }
   return set;
 }
 function placeSponges(G,P,L,ch,start,rnd){
   const nS=Math.max(0,Math.round(P.sponges||0));
   if(nS<=0||spongeLength(P,G)<8)return;
+  const side=P.dampSide==='random'?['left','right','top','bottom'][Math.floor(rnd()*4)]:P.dampSide;
+  L.damp=side;
   const cand=[];
   for(const e of interiorEdges(L,ch)){
     if(getEdge(L,e)!=='solid')continue;
@@ -185,21 +245,27 @@ function placeSponges(G,P,L,ch,start,rnd){
     let mx,my;
     if(e.type==='H'){mx=(G.xs[e.k]+G.xs[e.k+1])/2;my=G.ys[e.j];}else{mx=G.xs[e.i];my=(G.ys[e.r]+G.ys[e.r+1])/2;}
     const u=(mx-P.B)/G.innerW,v=(my-P.B)/G.innerH;
-    const base={left:1-u,right:u,top:1-v,bottom:v,none:0.5}[P.dampSide]??0.5;
+    const base={left:1-u,right:u,top:1-v,bottom:v,none:0.5}[side]??0.5;
     const inStart=(start.has(e.a)?1:0)+(start.has(e.b)?1:0);
-    cand.push({e,inStart,score:base+rnd()*(P.dampSide==='none'?1:0.25)});
+    cand.push({e,x:mx,y:my,base,inStart,score:base+rnd()*(side==='none'?1:0.35)});
   }
   cand.sort((x,y)=>y.score-x.score);
   const sc=new Map();let placed=0;
-  const put=e=>{setEdge(L,e,'sponge');sc.set(e.a,(sc.get(e.a)||0)+1);sc.set(e.b,(sc.get(e.b)||0)+1);placed++;};
+  const spots=[];
+  const put=({e,x,y})=>{setEdge(L,e,'sponge');sc.set(e.a,(sc.get(e.a)||0)+1);sc.set(e.b,(sc.get(e.b)||0)+1);spots.push([x,y]);placed++;};
   // the starting area always gets water first, ideally on a wall with both sides open
   const first=cand.find(c=>c.inStart===2)||cand.find(c=>c.inStart===1);
-  if(first)put(first.e);
-  for(const {e} of cand){
+  if(first)put(first);
+  // Keep them apart, moving closer only when there is no room at that spacing. They close up
+  // before crossing to the dry half, because a sponge there would spoil the damp end and dry end.
+  const apart=2.2*Math.min(G.cellW,G.cellH),damp=cand.filter(c=>c.base>=0.5);
+  const passes=[[damp,apart],[damp,apart*0.7],[damp,apart*0.4],[cand,apart*0.4],[cand,0]];
+  for(const [pool,gap] of passes)for(const c of pool){
     if(placed>=nS)break;
-    if(getEdge(L,e)!=='solid')continue;
-    if((sc.get(e.a)||0)>=2||(sc.get(e.b)||0)>=2)continue;
-    put(e);
+    if(getEdge(L,c.e)!=='solid')continue;
+    if((sc.get(c.e.a)||0)>=2||(sc.get(c.e.b)||0)>=2)continue;
+    if(spots.some(([x,y])=>Math.hypot(x-c.x,y-c.y)<gap))continue;
+    put(c);
   }
 }
 // port positions and the cell each one lands in (ignores ports that sit on a grid line)

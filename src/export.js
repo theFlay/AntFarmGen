@@ -7,6 +7,7 @@ import {heatFrameLayers} from './heat.js';
 import {svgToDxf} from './dxf.js';
 import {escapeHtml} from './sanitize.js';
 import {hardwareParts,pegPart,keyPart,PEG_FIT,JOIN_LEG} from './hardware.js';
+import {boltDia} from './params.js';
 
 /* ---------------- export ---------------- */
 export function svgDoc(w,h,body,title){
@@ -41,7 +42,7 @@ export function borderSlot(o,len,t,fit){
   return o.along==='x'?{x0:o.x-hl,x1:o.x+hl,y0:o.y-ht,y1:o.y+ht}:{x0:o.x-ht,x1:o.x+ht,y0:o.y-hl,y1:o.y+hl};
 }
 function fastenerCuts(G,P,geo,d){
-  if(P.fastener==='bolt')return geo.fasteners.map(o=>d.hole(o.x,o.y,P.boltD));
+  if(P.fastener==='bolt')return geo.fasteners.map(o=>d.hole(o.x,o.y,boltDia(P)));
   if(P.fastener==='peg')return geo.fasteners.map(o=>d.rect(borderSlot(o,P.pegW,G.t,PEG_FIT)));
   return [];
 }
