@@ -14,21 +14,30 @@ import {findRoutes} from './routes.js';
 import {portCells} from './generate.js';
 import {cleanLayout,cleanParam,escapeHtml} from './sanitize.js';
 import JSZip from 'jszip';
-import {RACK_FIELDS,buildRack,rackFiles,rackHoleTest,rackPreview,rackDefaults} from './rack.js';
+import {RACK_FIELDS,buildRack,rackFiles,rackHoleTest,rackPreview,rackDefaults,cleanRack} from './rack.js';
 import {OUT_FIELDS,buildOutworld,outworldFiles,outworldPreview,outDefaults,tubeHoleTest} from './outworld.js';
+// a long choice gets a row of its own, so its text is not cut off
+function fieldHtml(f,id){
+  let input;
+  if(f.text)input=`<input type="text" id="${id}" maxlength="${f.max}">`;
+  else if(f.opts)input=`<select id="${id}">${f.opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
+  else if(f.bool)input=`<input type="checkbox" id="${id}">`;
+  else if(f.color)input=`<input type="color" id="${id}">`;
+  else input=`<input type="number" inputmode="decimal" id="${id}" step="${f.step||1}"${f.opt?' placeholder="auto"':''}>`;
+  const wide=f.opts&&f.opts.some(o=>o[1].length>15);
+  return `<div class="field${wide?' wide':''}" data-f="${f.k}"><label for="${id}">${f.l}</label>${input}${f.h?`<small>${f.h}</small>`:''}</div>`;
+}
+// hides settings that do nothing with the current choices
+function showWhen(rootId,fields,state,extra){
+  const root=document.getElementById(rootId);
+  for(const f of fields)if(f.when){const el=root.querySelector(`[data-f="${f.k}"]`);if(el)el.hidden=!f.when(state,extra);}
+}
 function buildForm(){
   const root=document.getElementById('controls');
   let html='';
   for(const [name,open,fields] of PARAMS){
     html+=`<div class="group"><details${open?' open':''}><summary>${name}</summary>`;
-    for(const f of fields){
-      let input;
-      if(f.opts) input=`<select id="p_${f.k}">${f.opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
-      else if(f.bool) input=`<input type="checkbox" id="p_${f.k}">`;
-      else if(f.color) input=`<input type="color" id="p_${f.k}">`;
-      else input=`<input type="number" inputmode="decimal" id="p_${f.k}" step="${f.step||1}"${f.opt?' placeholder="auto"':''}>`;
-      html+=`<div class="field"><label for="p_${f.k}">${f.l}</label>${input}${f.h?`<small>${f.h}</small>`:''}</div>`;
-    }
+    for(const f of fields)html+=fieldHtml(f,'p_'+f.k);
     if(name==='Ants') html+=`<div class="derived" id="derived"></div>`;
     html+=`</details></div>`;
   }
@@ -99,6 +108,7 @@ function onParamChange(k){
 function render(){
   G=derive(P);
   if(!L||L.cols!==G.cols||L.rows!==G.rows){L=generate(G,P);}
+  showWhen('controls',ALL_FIELDS,P);
   geo=buildGeometry(G,L,P);
   rules=checkRules(G,L,P,geo);
   const routes=currentRoutes();
@@ -301,14 +311,7 @@ function buildRackForm(){
    html+=`<div class="group"><details${g==='Tubes and rack'?' open':''}><summary>${g}</summary>`;
    if(g==='Face text')html+='<p class="note">The top of the rack split into 9 squares. Fill in any you like.</p><div class="facegrid">'+
      RACK_FIELDS.filter(f=>f.grid).map(f=>`<input type="text" id="r_${f.k}" maxlength="${f.max}" aria-label="${f.l}">`).join('')+'</div>';
-   for(const f of RACK_FIELDS.filter(x=>(x.g||'Tubes and rack')===g&&!x.grid)){
-    let input;
-    if(f.text)input=`<input type="text" id="r_${f.k}" maxlength="${f.max}">`;
-    else if(f.opts)input=`<select id="r_${f.k}">${f.opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
-    else if(f.bool)input=`<input type="checkbox" id="r_${f.k}">`;
-    else input=`<input type="number" inputmode="decimal" id="r_${f.k}" step="${f.step||1}">`;
-    html+=`<div class="field"><label for="r_${f.k}">${f.l}</label>${input}${f.h?`<small>${f.h}</small>`:''}</div>`;
-   }
+   for(const f of RACK_FIELDS.filter(x=>(x.g||'Tubes and rack')===g&&!x.grid))html+=fieldHtml(f,'r_'+f.k);
    html+='</details></div>';
   }
   document.getElementById('rackControls').innerHTML=html;
@@ -325,7 +328,8 @@ function renderRack(){
   const r=buildRack(rackState,P);
   window.__nest.rack=r;
   document.getElementById('rackPreview').innerHTML=rackPreview(r);
-  const msgs=[...r.errors.map(m=>['error',m]),...r.warnings.map(m=>['warn',m])];
+  showWhen('rackControls',RACK_FIELDS,cleanRack(rackState));
+  const msgs=[...r.errors.map(m=>['error',m]),...r.warnings.map(m=>['warn',m]),...r.notes.map(m=>['info',m])];
   if(!r.errors.length)msgs.unshift(['ok','Ready to export.']);
   document.getElementById('rackChecks').innerHTML=msgs.map(([lv,m])=>`<div class="msg ${lv}">${escapeHtml(m)}</div>`).join('');
   const st=[['Tubes',`${r.R.left}${r.R.right?` + ${r.R.right}`:''}`],['Outer size',`${f1(r.Lo)} x ${f1(r.Wo)} mm`],['Height',`${f1(r.Hi+2*r.R.t)} mm`],
@@ -337,7 +341,9 @@ function renderRack(){
     rackFilesNow.map((f,i)=>`<button data-rack="${i}"${ok?'':' disabled'}>${escapeHtml(f.name)}</button>`).join(''));
   if(mode==='rack'){
     const pill=document.getElementById('pill');
-    pill.className='pill '+(ok?'good':'bad');pill.textContent=ok?'Ready to export':'Fix the checks';
+    const warns=r.warnings.length;
+    pill.className='pill '+(!ok?'bad':warns?'warn':'good');
+    pill.textContent=!ok?'Fix the checks':warns?`Ready, ${warns} warning${warns>1?'s':''}`:'Ready to export';
   }
 }
 /* ---------------- outworld ---------------- */
@@ -347,13 +353,7 @@ function buildOutForm(){
   let html='';
   for(const g of groups){
     html+=`<div class="group"><details${g==='Materials'?'':' open'}><summary>${g}</summary>`;
-    for(const f of OUT_FIELDS.filter(x=>(x.g||'Outworld box')===g)){
-      let input;
-      if(f.opts)input=`<select id="o_${f.k}">${f.opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select>`;
-      else if(f.bool)input=`<input type="checkbox" id="o_${f.k}">`;
-      else input=`<input type="number" inputmode="decimal" id="o_${f.k}" step="${f.step||1}">`;
-      html+=`<div class="field"><label for="o_${f.k}">${f.l}</label>${input}${f.h?`<small>${f.h}</small>`:''}</div>`;
-    }
+    for(const f of OUT_FIELDS.filter(x=>(x.g||'Outworld box')===g))html+=fieldHtml(f,'o_'+f.k);
     html+='</details></div>';
   }
   html+='<p class="note">Sheet thickness, kerf, sheet size, port spacing and the nest itself come from the Nest panel page.</p>';
@@ -369,15 +369,16 @@ function buildOutForm(){
 }
 function renderOut(){
   const ow=buildOutworld(outState,P,geo);
+  showWhen('outControls',OUT_FIELDS,ow.O,P);
   window.__nest.outworld=ow;
   document.getElementById('outPreview').innerHTML=outworldPreview(ow);
   const msgs=[...ow.errors.map(m=>['error',m]),...ow.warnings.map(m=>['warn',m]),...ow.notes.map(m=>['info',m])];
   if(!ow.errors.length)msgs.unshift(['ok','Ready to export.']);
   document.getElementById('outChecks').innerHTML=msgs.map(([lv,m])=>`<div class="msg ${lv}">${escapeHtml(m)}</div>`).join('');
   const lidName={lift:'Lift-off',slide:'Sliding',open:'Open top with a lip'}[ow.O.lid];
-  const joins={tube:`${ow.O.tubes} tube${ow.O.tubes>1?'s':''}, ${f1(ow.O.tubeOD)}mm outside`,direct:'Docking onto the nest',none:'Nothing'}[ow.O.connect];
+  const nh=ow.portHoles.length,joins=[nh?`${nh} tube hole${nh>1?'s':''}`:'',ow.nDock?`${ow.nDock} dock${ow.nDock>1?'s':''}`:''].filter(Boolean).join(', ')||'none';
   const st=[['Inside',`${f1(ow.L)} x ${f1(ow.W)} x ${f1(ow.O.owH)} mm`],['Outer size',`${f1(ow.outL)} x ${f1(ow.Wt)} x ${f1(ow.Hw)} mm`],
-    ['Floor height',`${f1(ow.floorTop)} mm`],['Lid',lidName],['Joins by',joins],['Parts',`${ow.parts.length+ow.lidParts.length+ow.conn.length}`],['3D prints',ow.prints.length?`${ow.prints.length} STL file${ow.prints.length>1?'s':''}`:'none']];
+    ['Floor height',`${f1(ow.floorTop)} mm`],['Lid',lidName],['Ports',joins],['Parts',`${ow.parts.length+ow.lidParts.length+ow.conn.length}`],['3D prints',ow.prints.length?`${ow.prints.length} STL file${ow.prints.length>1?'s':''}`:'none']];
   document.getElementById('outStats').innerHTML=st.map(([a,b])=>`<div><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
   outFilesNow=outworldFiles(ow,{cutColor:P.cutColor,engraveColor:P.engraveColor});
   const ok=!ow.errors.length;

@@ -39,6 +39,7 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 - Sponge pockets, sensor pockets, support pillars, water vial holders (flat), water chambers (upright).
 - Frosting for floor, ceiling and walls, as separate engrave files, whole or by chosen cells.
 - Heat: floor channel (flat only), and border heat on any of the four borders (flat or upright).
+- Settings that do nothing with the current choices are hidden, such as bolt size with pegs. On a phone, each page has a Jump to settings link.
 - SVG and optional DXF export, laser bed checks for the Speedy 300 and 360, save and load layouts, and the fit test piece.
 
 **Test tube rack**
@@ -49,10 +50,12 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 
 **Outworld**
 - A tabbed box from inside length, width and height. It takes sheet thickness, kerf, sheet size and port spacing from the Nest panel page, so the two always match.
-- Lid, picked in the app: lift-off (sits on the wall tabs), sliding (rests on the side walls, comes out through a slot in the front wall, stops at the port wall), or open top with an inward lip and a barrier coating.
+- Lid, picked in the app: lift-off (sits on the wall tabs), sliding (rests on the side walls, comes out through a slot in the front wall, stops at the back wall), or open top with an inward lip and a barrier coating.
 - Vent hole grid in the lid. Warns over 2mm.
-- Joins the nest by tube holes in the port wall, or by docking: the port wall butts onto the nest edge with a window lined up with one port.
-- Tube dock: a plate with a tube hole that fixes over a nest port, one per tube. Bulkhead rings for a bought tub.
+- Ports on every wall: up to 4 tube holes each on the back, front and both side walls, one each by default, so an outworld can join nests and other outworlds on any side. A plug (disc, cap and pin, or one printed piece) is cut for every hole so unused ones can be closed.
+- Docking: the back wall, the front wall or both can butt onto a nest edge, with a window lined up with one port. A docked wall has no tube holes.
+- Tube docks (a plate with a tube hole that fixes over a nest port), as many as you need. Bulkhead rings for a bought tub.
+- The preview shows the box from above with each wall folded out flat, so every port shows in place.
 - Flat nests clamp with two bars that lie on the nest's top face. A pin drops through each bar into the nest joining slot either side of the port, and a short wedge key pulls the wall tight to the nest edge. Checks list which nest ports have a joining slot on both sides.
 - Upright nests stand beside the outworld and dock at a port on their left or right edge, the lowest by default or a chosen one. Two edge clips, above and below the port, pass through slits in the wall and grip the front and back of the nest. The clips are a set amount narrower than the nest (grip, default 0.2mm). The window sits at the port's height above the shelf, allowing for the feet. Upright tube docks use the same clips, so they need no joining slots.
 - A tube hole test strip.
@@ -115,7 +118,7 @@ node tests/live.mjs "text on the page"   # checks the live site
 
 - Edit `src/`, then run `npm run build`. Never edit `index.html` by hand.
 - Every push to `develop` is tested by `.github/workflows/pages.yml`, and only goes live if the tests pass.
-- Current state: 187 unit tests plus the browser tests, all passing.
+- Current state: 197 unit tests plus the browser tests, all passing.
 - After a change, look at rendered output as well as the tests. Several real bugs were only found that way.
 
 ## Project rules

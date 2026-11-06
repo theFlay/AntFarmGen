@@ -17,28 +17,41 @@ export const OUT_MATS=[
   ['bar','Dock bars'],['pin','Dock pins'],['dkey','Dock keys'],
   ['tdock','Tube docks','Printed docks have a socket that holds the tube for 10mm.'],
   ['tport','Tube ports','Acrylic is a plain hole. Printed adds a sleeve that grips the tube.'],
+  ['hplug','Tube hole plugs','Printed plugs are one piece. Acrylic ones are a disc, a cap and a pin.'],
   ['bulk','Bulkhead rings'],
 ];
 export const OUT_FIELDS=[
   {k:'owL',l:'Inside length (mm)',d:250,step:1,range:[60,1500]},
-  {k:'owW',l:'Inside width (mm)',d:150,step:1,range:[40,1000],h:'The port wall is this wide, plus the walls.'},
+  {k:'owW',l:'Inside width (mm)',d:150,step:1,range:[40,1000],h:'The back and front walls are this wide inside the side walls.'},
   {k:'owH',l:'Inside height (mm)',d:80,step:1,range:[20,400],h:'Measured from the floor. Leave room above any sand or soil.'},
   {k:'lid',l:'Lid',d:'lift',opts:[['lift','Lift-off lid'],['slide','Sliding lid'],['open','Open top with a lip']],h:'Lift-off is the simplest. Sliding is harder to leave open by mistake. Open top needs a barrier coating such as Fluon below the lip.'},
   {k:'lipW',l:'Lip width, open top (mm)',d:12,step:1,range:[5,60],h:'How far the lip reaches in over the walls.'},
   {k:'ventD',l:'Vent hole diameter (mm)',d:1,step:0.1,range:[0.5,10],h:'Smaller than the head of your smallest worker.'},
   {k:'ventCols',l:'Vent holes along the length',d:8,step:1,range:[0,40]},
   {k:'ventRows',l:'Vent holes across',d:4,step:1,range:[0,40]},
-  {k:'connect',g:'Connection',l:'Joins the nest by',d:'tube',opts:[['tube','A tube'],['direct','Docking onto the nest'],['none','Nothing']],h:'Docking butts the port wall against the nest edge, with a window lined up with one nest port. Flat nests clamp on with bars. Upright nests stand beside it and clip on at a side port.'},
-  {k:'dockPort',g:'Connection',l:'Upright nest port to dock (0 = lowest)',d:0,step:1,range:[0,200],h:'The number of a port on the left or right edge, as shown on the nest page. 0 picks the lowest one.'},
-  {k:'clipGrip',g:'Connection',l:'Edge clip grip (mm)',d:0.2,step:0.05,range:[0,1],h:'How much narrower than the nest the clips are, so they hold on.'},
-  {k:'tubes',g:'Connection',l:'Tube holes',d:1,step:1,range:[1,4],h:'All in the port wall, just above the floor.'},
-  {k:'tubeOD',g:'Connection',l:'Tube outside diameter (mm)',d:12,step:0.5,range:[4,30]},
-  {k:'tubeID',g:'Connection',l:'Tube inside diameter (mm)',d:8,step:0.5,range:[2,28],h:'Should be at least the nest tunnel width.'},
-  {k:'tubeClear',g:'Connection',l:'Tube hole clearance (mm)',d:0,step:0.1,range:[-2,3],h:'Added to the outside diameter. Negative grips tighter. Tune it with the tube hole test.'},
-  {k:'nestDock',g:'Connection',l:'Cut a tube dock for the nest',d:true,bool:true,h:'A plate with a tube hole that fixes over a nest port. One for each tube.'},
-  {k:'bulkheads',g:'Connection',l:'Bulkheads for a bought tub',d:0,step:1,range:[0,10],h:'Two rings each. Drill the tub, ring each side, push the tube through.'},
+  {k:'tubesBack',g:'Ports',l:'Tube holes, back wall',d:1,step:1,range:[0,4],h:'Every wall can take tubes, so an outworld can join nests and other outworlds on any side. Plug the holes you are not using.'},
+  {k:'tubesFront',g:'Ports',l:'Tube holes, front wall',d:1,step:1,range:[0,4]},
+  {k:'tubesSide1',g:'Ports',l:'Tube holes, side 1',d:1,step:1,range:[0,4]},
+  {k:'tubesSide2',g:'Ports',l:'Tube holes, side 2',d:1,step:1,range:[0,4],h:'The preview shows which side is which.'},
+  {k:'dock',g:'Ports',l:'Dock straight onto a nest at',d:'none',opts:[['none','No dock'],['back','Back wall'],['front','Front wall'],['both','Back and front walls']],h:'A docked wall butts against the nest edge with a window lined up with one nest port, instead of tube holes. Flat nests clamp on with bars. Upright nests stand beside it and clip on at a side port.'},
+  {k:'dockPort',g:'Ports',l:'Upright nest port to dock (0 = lowest)',d:0,step:1,range:[0,200],h:'The number of a port on the left or right edge, as shown on the nest page. 0 picks the lowest one.'},
+  {k:'clipGrip',g:'Ports',l:'Edge clip grip (mm)',d:0.2,step:0.05,range:[0,1],h:'How much narrower than the nest the clips are, so they hold on.'},
+  {k:'tubeOD',g:'Tubes',l:'Tube outside diameter (mm)',d:12,step:0.5,range:[4,30]},
+  {k:'tubeID',g:'Tubes',l:'Tube inside diameter (mm)',d:8,step:0.5,range:[2,28],h:'Should be at least the nest tunnel width.'},
+  {k:'tubeClear',g:'Tubes',l:'Tube hole clearance (mm)',d:0,step:0.1,range:[-2,3],h:'Added to the outside diameter. Negative grips tighter. Tune it with the tube hole test.'},
+  {k:'holePlugs',g:'Tubes',l:'Cut a plug for every tube hole',d:true,bool:true,h:'So any hole can be closed. With printed sleeves, fit a sleeve in every hole: the plugs fit the sleeve.'},
+  {k:'nestDocks',g:'Tubes',l:'Tube docks for nests',d:1,step:1,range:[0,16],h:'A plate that fixes a tube over a nest port. One for each tube that goes to a nest.'},
+  {k:'bulkheads',g:'Tubes',l:'Bulkheads for a bought tub',d:0,step:1,range:[0,10],h:'Two rings each. Drill the tub, ring each side, push the tube through.'},
   ...OUT_MATS.map(([k,l,h])=>({k:'m_'+k,g:'Materials',l,d:'acrylic',opts:MAT_OPTS,h})),
 ];
+{
+  const holes=O=>O.tubesBack+O.tubesFront+O.tubesSide1+O.tubesSide2>0,clamps=O=>O.dock!=='none'||O.nestDocks>0;
+  const up=(O,P)=>P&&P.orient==='upright';
+  const WHEN={lipW:O=>O.lid==='open',dockPort:(O,P)=>O.dock!=='none'&&up(O,P),clipGrip:(O,P)=>clamps(O)&&up(O,P),
+    holePlugs:holes,m_tport:holes,m_hplug:O=>holes(O)&&O.holePlugs,m_tdock:O=>O.nestDocks>0,m_bulk:O=>O.bulkheads>0,
+    m_clip:(O,P)=>clamps(O)&&up(O,P),m_bar:(O,P)=>clamps(O)&&!up(O,P),m_pin:(O,P)=>clamps(O)&&!up(O,P),m_dkey:(O,P)=>clamps(O)&&!up(O,P)};
+  for(const f of OUT_FIELDS)if(WHEN[f.k])f.when=WHEN[f.k];
+}
 export const outDefaults=()=>Object.fromEntries(OUT_FIELDS.map(f=>[f.k,f.d]));
 export const cleanOut=O=>Object.fromEntries(OUT_FIELDS.map(f=>[f.k,cleanParam(f,f.k in O?O[f.k]:f.d)]));
 
@@ -81,12 +94,13 @@ export function buildOutworld(input,P,geo){
   const Wt=W+2*t+2*e;
   const Hl=floorTop+O.owH;                       // side walls
   const Hw=slide?Hl+t+0.3+5:Hl;                  // end walls rise over a sliding lid
-  const NH=nestHeights(P),pitch=P.portPitch,docking=O.connect==='direct',tube=O.connect==='tube';
+  const NH=nestHeights(P),pitch=P.portPitch;
+  const dockBack=O.dock==='back'||O.dock==='both',dockFront=O.dock==='front'||O.dock==='both';
   const upright=P.orient==='upright',stack=NH.stack;
   const D=O.tubeOD+O.tubeClear;
   const sleeveOD=D+2*SLEEVE_WALL,portHole=pr('tport')?sleeveOD+0.1:D;
   const clipH=pr('clip')?CLIP_PRINT:t,reach=Math.min(12,P.B-2);
-  const parts=[],lidParts=[],conn=[];
+  const parts=[],lidParts=[],conn=[],views=[];
   const sl=Math.min(10,(Hl-floorTop)/4);
   const sideZ=Hl-floorTop>=40?[floorTop+(Hl-floorTop)*0.3,floorTop+(Hl-floorTop)*0.75]:[(floorTop+Hl)/2];
   const xs=spread(L,10),ys=spread(W,10);
@@ -97,40 +111,28 @@ export function buildOutworld(input,P,geo){
     return {name,key,w:p.w,h:p.h,poly:p.poly,holes:cuts.map(rz),circles:circles.map(([u,z,d])=>[u+p.ox,h-z+p.oy,d]),labels:[],ox:p.ox,oy:p.oy,H:h};
   }
   const baseSlot=u=>[u-5-cl/2,LIFT-cl/2,u+5+cl/2,LIFT+t+cl/2];
-  // side walls run between the end walls
-  for(let i=0;i<2;i++){
-    const f={left:sideZ.map(z=>({u:Hl-z,l:sl,d:t})),right:sideZ.map(z=>({u:Hl-z,l:sl,d:t}))};
-    if(topTabs)f.top=xs.map(u=>({u,l:10,d:t}));
-    parts.push(wall('side wall','side',L,Hl,f,xs.map(baseSlot)));
-  }
-  // end walls: the port wall faces the nest, the far wall faces away
+  const sideTabs=()=>{const f={left:sideZ.map(z=>({u:Hl-z,l:sl,d:t})),right:sideZ.map(z=>({u:Hl-z,l:sl,d:t}))};if(topTabs)f.top=xs.map(u=>({u,l:10,d:t}));return f;};
   const endCuts=()=>[...[e+t/2,e+1.5*t+W].flatMap(u=>sideZ.map(z=>[u-t/2-cl/2,z-sl/2-cl/2,u+t/2+cl/2,z+sl/2+cl/2])),...ys.map(u=>baseSlot(e+t+u))];
   const endTabs=()=>topTabs?{top:ys.map(u=>({u:e+t+u,l:10,d:t}))}:{};
-  const portCuts=endCuts(),portHoles=[];
-  if(tube){
-    const gapW=W/O.tubes;
-    if(gapW<portHole+4)errors.push(`${O.tubes} tube holes of ${f1(portHole)}mm do not fit across a ${W}mm wall.`);
-    for(let i=0;i<O.tubes;i++)portHoles.push([e+t+gapW*(i+0.5),floorTop+portHole/2+2,portHole]);
-    if(floorTop+portHole+2>Hl-3)errors.push('The tube holes are taller than the walls.');
-  }
   // slits for the clamp bars of a flat nest, at its joining slots either side of the port
   const slitsAt=(w0,w1)=>[w0,w1].map(u=>[u-BAR_W/2-SLIT_FIT,NH.top,u+BAR_W/2+SLIT_FIT,NH.top+t+2*SLIT_FIT]);
   // slits for the two arms of an edge clip, either side of a nest edge centred at u
   const clipSlits=(u,z)=>{const u0=u-stack/2,g=O.clipGrip/2,z0=z-clipH/2-SLIT_FIT,z1=z+clipH/2+SLIT_FIT;
     return [[u0+g-ARM-SLIT_FIT,z0,u0+g+SLIT_FIT,z1],[u0+stack-g-SLIT_FIT,z0,u0+stack-g+ARM+SLIT_FIT,z1]];};
+  // the window and slits for a dock, the same on whichever end wall docks
   let dock=null;                                 // where an upright nest's port meets the wall
-  const clamp=upright?'clip':'bar';
-  const docks=docking?1:tube&&O.nestDock?O.tubes:0;
-  if(docking&&!upright){
+  const dockCuts=[],nDock=(dockBack?1:0)+(dockFront?1:0);
+  if(nDock&&!upright){
     const z0=Math.max(NH.portBot,floorTop),z1=NH.portTop;
     if(z1-z0<3)errors.push('The nest port sits below the outworld floor, so a dock window would be too low. Use a tube.');
-    else portCuts.push([Wt/2-NH.G.tunnelW/2,z0,Wt/2+NH.G.tunnelW/2,z1]);
+    else dockCuts.push([Wt/2-NH.G.tunnelW/2,z0,Wt/2+NH.G.tunnelW/2,z1]);
     if(NH.portBot<floorTop-0.5)notes.push(`The outworld floor is ${f1(floorTop-NH.portBot)}mm above the bottom of the nest port, so the ants step up into it.`);
     if(NH.top+t+5>Hw)errors.push('The outworld is too low to dock onto this nest.');
-    if(W<pitch+BAR_W+2)errors.push(`The port wall must be at least ${f1(pitch+BAR_W+2)}mm wide inside to reach the joining slots ${pitch/2}mm either side of the port.`);
-    portCuts.push(...slitsAt(Wt/2-pitch/2,Wt/2+pitch/2));
+    if(dockFront&&slide&&NH.top+t+3+1>Hl)errors.push(`The sliding lid comes out through the front wall just ${f1(Hl-NH.top)}mm above the nest, and would hit the dock clamps. Make the outworld taller, or dock on the back wall.`);
+    if(W<pitch+BAR_W+2)errors.push(`A docked wall must be at least ${f1(pitch+BAR_W+2)}mm wide inside to reach the joining slots ${pitch/2}mm either side of the port.`);
+    dockCuts.push(...slitsAt(Wt/2-pitch/2,Wt/2+pitch/2));
   }
-  if(docking&&upright){
+  if(nDock&&upright){
     const list=sidePorts(P,geo),port=O.dockPort?list.find(p=>p.id==='P'+O.dockPort):list[0];
     if(!port)errors.push(O.dockPort?`Port P${O.dockPort} is not a port on the left or right edge of the nest.`:'The nest has no ports on its left or right edge to dock to.');
     else{
@@ -140,11 +142,46 @@ export function buildOutworld(input,P,geo){
       if(zc-tw/2<floorTop)errors.push(`The port (${pid}) sits below the outworld floor. Pick a higher port.`);
       else notes.push(`Docks onto ${pid}, ${f1(zc-tw/2-floorTop)}mm above the outworld floor. Most ants climb acrylic. For ones that cannot, add a ramp or deeper sand.`);
       if(zClip[1]+clipH/2+3>Hl)errors.push(`That port is ${f1(zc)}mm up. Make the outworld at least ${Math.ceil(zClip[1]+clipH/2+3-floorTop)}mm tall inside, or pick a lower port.`);
-      if(W<stack+2*ARM+2)errors.push(`The port wall must be at least ${f1(stack+2*ARM+2)}mm wide inside.`);
-      portCuts.push([Wt/2-stack/2+P.S,zc-tw/2,Wt/2+stack/2-P.S,zc+tw/2]);
-      for(const z of zClip)portCuts.push(...clipSlits(Wt/2,z));
+      if(W<stack+2*ARM+2)errors.push(`A docked wall must be at least ${f1(stack+2*ARM+2)}mm wide inside.`);
+      dockCuts.push([Wt/2-stack/2+P.S,zc-tw/2,Wt/2+stack/2-P.S,zc+tw/2]);
+      for(const z of zClip)dockCuts.push(...clipSlits(Wt/2,z));
+      if(dockFront&&slide)warnings.push('The sliding lid comes out through the front wall, so an upright nest docked there is in its way.');
     }
   }
+  // every wall can hold tube holes, spread along it just above the floor
+  // side: where the wall folds out in the preview
+  const specs=[
+    {label:'back wall',side:'back',key:'ends',end:true,n:O.tubesBack,docked:dockBack},
+    {label:'front wall',side:'front',key:'ends',end:true,n:O.tubesFront,docked:dockFront,lidSlot:slide},
+    {label:'side wall 1',side:'top',key:'side',end:false,n:O.tubesSide1},
+    {label:'side wall 2',side:'bottom',key:'side',end:false,n:O.tubesSide2},
+  ];
+  // what sits on the outside of a hole: the hole itself, a plug cap, or a printed sleeve's flange
+  const plugCap=D+6,outside=Math.max(portHole,O.holePlugs?plugCap:0,pr('tport')?sleeveOD+8:0);
+  const holeZ=Math.max(floorTop+portHole/2+2,outside/2+1);
+  const portHoles=[];
+  for(const w of specs){
+    const {label}=w;
+    if(w.docked&&w.n)notes.push(`The ${label} docks onto a nest, so its tube holes are left out.`);
+    const n=w.docked?0:w.n,along=w.end?W:L,off=w.end?e+t:0,holes=[];
+    if(n){
+      // neighbours' caps must not touch, and on a side wall they must clear the end walls
+      if(along/n<outside+2||(!w.end&&along/(2*n)<outside/2+1))errors.push(`${n} tube hole${n>1?'s':''} with ${f1(outside)}mm ${O.holePlugs?'plug caps':'holes'} do not fit along the ${label}.`);
+      if(holeZ+portHole/2>Hl-3)errors.push('The tube holes are taller than the walls.');
+      for(let i=0;i<n;i++)holes.push([off+along*(i+0.5)/n,holeZ,portHole]);
+    }
+    portHoles.push(...holes.map(h=>({wall:label,u:h[0],z:h[1],d:h[2]})));
+    const cuts=w.end?endCuts():xs.map(baseSlot),extra=w.docked?dockCuts:[];
+    const lidCut=[e-0.2,Hl,e+2*t+W+0.2,Hl+t+0.3];
+    if(w.lidSlot)cuts.push(lidCut);
+    parts.push(wall(w.lidSlot?label+' with lid slot':label,w.key,w.end?Wt:L,w.end?Hw:Hl,w.end?endTabs():sideTabs(),[...cuts,...extra],holes));
+    views.push({name:label,side:w.side,w:w.end?Wt:L,h:w.end?Hw:Hl,cuts:w.lidSlot?[...extra,lidCut]:extra,holes,docked:!!w.docked});
+  }
+  const nHoles=portHoles.length,tubes=nHoles>0||O.nestDocks>0||O.bulkheads>0;
+  if(O.nestDocks&&!nHoles&&!O.bulkheads)warnings.push(`${O.nestDocks} tube dock${O.nestDocks>1?'s are':' is'} cut, but the outworld has no tube holes. Set Tube docks for nests to 0 if you do not need ${O.nestDocks>1?'them':'it'}.`);
+  if(O.nestDocks&&nDock)notes.push(`As well as the dock, ${O.nestDocks} tube dock${O.nestDocks>1?'s are':' is'} cut for tubes to other nests. Set Tube docks for nests to 0 if you do not need ${O.nestDocks>1?'them':'it'}.`);
+  // each dock and each tube dock clamps onto a nest
+  const docks=nDock+O.nestDocks,clamp=upright?'clip':'bar';
   if(docks){
     if(!upright){
       if(!P.joinSlots||P.B<12||P.portPitch<5)errors.push('On a flat nest, a dock clamps on through the nest joining slots. Turn on Slots for joining panels on the nest page (needs a border of 12mm or more).');
@@ -153,19 +190,15 @@ export function buildOutworld(input,P,geo){
         if(!ok.length)errors.push('No port on this nest has a joining slot on both sides, so there is nowhere to dock.');
         else{
           notes.push(`Docks fit nest port${ok.length>1?'s':''} ${ok.map(p=>p.id).join(', ')}.`);
-          if(!ok.some(p=>p.used))warnings.push('On the nest page, mark the port you dock to as used with the Ports tool, so no plug is cut for it.');
+          if(!ok.some(p=>p.used))notes.push('On the nest page, mark the port you dock to as used with the Ports tool, so no plug is cut for it.');
         }
       }
       if(P.coverType==='whole'&&coverStand(NH.G,P)<t+3.5)warnings.push('The red cover sits too low to clear the dock clamps. Raise the cover gap on the nest page.');
     }else{
       if(reach<6)errors.push('Edge clips need a nest border of at least 8mm to grip.');
-      if(geo&&!geo.ports.some(p=>p.used&&(p.side==='left'||p.side==='right')))warnings.push('On the nest page, mark the port you dock to as used with the Ports tool, so no plug is cut for it.');
+      if(geo&&!geo.ports.some(p=>p.used&&(p.side==='left'||p.side==='right')))notes.push('On the nest page, mark the port you dock to as used with the Ports tool, so no plug is cut for it.');
     }
   }
-  parts.push(wall('port wall','ends',Wt,Hw,endTabs(),portCuts,portHoles));
-  const farCuts=endCuts();
-  if(slide)farCuts.push([e-0.2,Hl,e+2*t+W+0.2,Hl+t+0.3]);
-  parts.push(wall(slide?'front wall with lid slot':'front wall','ends',Wt,Hw,endTabs(),farCuts));
   // floor: sits a little up the walls so their slots keep a rim below
   {
     const f={top:xs.map(u=>({u,l:10,d:t})),bottom:xs.map(u=>({u,l:10,d:t})),left:ys.map(u=>({u,l:10,d:t})),right:ys.map(u=>({u,l:10,d:t}))};
@@ -196,7 +229,7 @@ export function buildOutworld(input,P,geo){
     warnings.push('An open top only holds ants that cannot climb a barrier coating. Paint Fluon or PTFE on the walls just below the lip, and keep it fresh.');
   }
   if(slide){
-    // rests on the side walls, slides out through the front wall, stops at the port wall
+    // rests on the side walls, slides out through the front wall, stops at the back wall
     const tongue=16,len=L+t+tongue,wid=W+2*t;
     lidParts.push({name:'sliding lid',key:'lid',w:len,h:wid,poly:rectPts(0,0,len,wid),holes:[],circles:[...vents(0,t,L,W),[L+t+tongue/2,wid/2,9]],labels:[]});
   }
@@ -217,7 +250,7 @@ export function buildOutworld(input,P,geo){
   }
   // upright nests: edge clips, two at each dock
   if(docks&&clamp==='clip')for(let k=0;k<2*docks;k++)conn.push(clipPart(stack,O.clipGrip,reach,t,clipH));
-  if(tube&&O.nestDock){
+  if(O.nestDocks){
     // a plate over the nest port: the tube passes through it and butts on the nest edge
     let Wd,Hd,hole,slits;
     if(!upright){
@@ -229,29 +262,42 @@ export function buildOutworld(input,P,geo){
       Wd=stack+2*ARM+12;Hd=D+2*(3+clipH+3);hole=[Wd/2,Hd/2,D];
       slits=[Hd/2-D/2-3-clipH/2,Hd/2+D/2+3+clipH/2].flatMap(z=>clipSlits(Wd/2,z));
     }
-    for(let k=0;k<O.tubes;k++)conn.push(wall('tube dock','tdock',Wd,Hd,{},slits,[hole]));
+    for(let k=0;k<O.nestDocks;k++)conn.push(wall('tube dock','tdock',Wd,Hd,{},slits,[hole]));
   }
-  if(tube&&O.tubeID<NH.G.tunnelW)warnings.push(`The tube is ${f1(O.tubeID)}mm inside, narrower than the ${f1(NH.G.tunnelW)}mm nest tunnels. Queens may not fit.`);
-  if(tube&&O.tubeID>=O.tubeOD)errors.push('The tube inside diameter must be smaller than the outside.');
+  if(tubes&&O.tubeID<NH.G.tunnelW)warnings.push(`The tube is ${f1(O.tubeID)}mm inside, narrower than the ${f1(NH.G.tunnelW)}mm nest tunnels. Queens may not fit.`);
+  if(tubes&&O.tubeID>=O.tubeOD)errors.push('The tube inside diameter must be smaller than the outside.');
+  // a plug for each tube hole: a disc in the hole, a cap outside, and a pin through both
+  if(O.holePlugs&&nHoles&&!pr('hplug')&&D-0.1<8)errors.push(`A ${f1(D-0.1)}mm acrylic plug is too small for its pin slot. Print the plugs, or turn plugs off.`);
+  else if(O.holePlugs&&nHoles&&!pr('hplug')){
+    const body=D-0.1,cap=plugCap,slot=(c)=>rectPts(c-2.1,c-t/2-0.1,c+2.1,c+t/2+0.1);
+    for(let i=0;i<nHoles;i++){
+      conn.push({name:'hole plug',key:'hplug',w:body,h:body,poly:circlePts(body/2,body/2,body),holes:[slot(body/2)],circles:[],labels:[]});
+      conn.push({name:'hole plug cap',key:'hplug',w:cap,h:cap,poly:circlePts(cap/2,cap/2,cap),holes:[slot(cap/2)],circles:[],labels:[]});
+      conn.push({name:'hole plug pin',key:'hplug',w:4,h:2*t,poly:rectPts(0,0,4,2*t),holes:[],circles:[],labels:[]});
+    }
+  }
   for(let i=0;i<O.bulkheads;i++)for(let k=0;k<2;k++){
     const s=O.tubeOD+16;
     conn.push({name:'bulkhead ring',key:'bulk',w:s,h:s,poly:rectPts(0,0,s,s),holes:[],circles:[[s/2,s/2,D]],labels:[]});
   }
   if(O.ventD>2)warnings.push('Vent holes over 2mm let most small workers out.');
   // printed parts: grouped by type, with the shapes that only make sense printed
-  const prints=[],byName=new Map();
+  const prints=[],byShape=new Map();
   for(const p of [...parts,...lidParts,...conn])if(pr(p.key)){
-    if(!byName.has(p.name))byName.set(p.name,{p,qty:0});
-    byName.get(p.name).qty++;
+    const sig=JSON.stringify([p.key,p.thick,p.poly,p.holes,p.circles]);
+    if(!byShape.has(sig))byShape.set(sig,{p,qty:0,names:new Set()});
+    const g=byShape.get(sig);g.qty++;g.names.add(p.name);
   }
-  for(const [name,{p,qty}] of byName){
+  for(const {p,qty,names} of byShape.values()){
+    const name=names.size>1?p.name.replace(/ \d+$/,''):p.name;
     const h=p.thick||t,solids=[partSolid(p,0,h)];
     if(p.key==='tdock'){const [cx,cy,d]=p.circles[0];solids.push(ringSolid(circlePts(cx,cy,d+2*SLEEVE_WALL),circlePts(cx,cy,d),h,h+SOCKET));}
     prints.push({name,qty,solids});
   }
-  if(tube&&pr('tport')){
+  if(O.holePlugs&&nHoles&&pr('hplug'))prints.push({name:'hole plug',qty:nHoles,solids:[partSolid({poly:circlePts(0,0,plugCap)},0,2),partSolid({poly:circlePts(0,0,D-0.1)},2,4+t)]});
+  if(nHoles&&pr('tport')){
     const c=0,fl=sleeveOD+8;
-    prints.push({name:'tube sleeve',qty:O.tubes,solids:[ringSolid(circlePts(c,c,fl),circlePts(c,c,D),0,2),ringSolid(circlePts(c,c,sleeveOD),circlePts(c,c,D),2,2+t+8)]});
+    prints.push({name:'tube sleeve',qty:nHoles,solids:[ringSolid(circlePts(c,c,fl),circlePts(c,c,D),0,2),ringSolid(circlePts(c,c,sleeveOD),circlePts(c,c,D),2,2+t+8)]});
   }
   for(const it of prints){
     const b=solidBounds(it.solids);
@@ -261,7 +307,7 @@ export function buildOutworld(input,P,geo){
   for(const p of cut([...parts,...lidParts,...conn]))if(p.w>P.stockW-10||p.h>P.stockH-10)errors.push(`The ${p.name} is ${fmt(p.w)} x ${fmt(p.h)}mm, too big for the ${P.stockW} x ${P.stockH}mm sheet.`);
   if(prints.length)notes.push('Printed parts match the acrylic sizes with no kerf offset. Print one first and check it fits.');
   return {O,P,parts,lidParts,conn,prints,cutParts:cut(parts),cutLid:cut(lidParts),cutConn:cut(conn),
-    errors:[...new Set(errors)],warnings,notes,L,W,Wt,Hl,Hw,e,floorTop,outL:L+2*t,portHoles,docking,NH,upright,dock,clipH,reach};
+    errors:[...new Set(errors)],warnings:[...new Set(warnings)],notes:[...new Set(notes)],L,W,Wt,Hl,Hw,e,floorTop,outL:L+2*t,portHoles,views,nDock,NH,upright,dock,clipH,reach};
 }
 
 export function outworldFiles(ow,colors){
@@ -280,7 +326,7 @@ export function outworldFiles(ow,colors){
   };
   draw(ow.cutParts,'outworld-box','Outworld walls and floor');
   draw(ow.cutLid,'outworld-lid','Outworld lid');
-  draw(ow.cutConn,'outworld-connectors','Docks, clips, clamp bars, pins, keys and bulkhead rings');
+  draw(ow.cutConn,'outworld-connectors','Docks, clips, clamp bars, pins, keys, tube hole plugs and bulkhead rings');
   for(const it of ow.prints)files.push(printFile({...it,name:'outworld '+it.name}));
   return files;
 }
@@ -294,46 +340,33 @@ export function tubeHoleTest(input,P){
   });
   return {name:'tube-hole-test.svg',data:svgDoc(W,H,b.join('\n'),'Tube hole test')};
 }
-// top view, and the port wall seen from the nest side
+// the box from above with its walls folded out flat around it, so every port shows in place
 export function outworldPreview(ow){
-  const {P,L,W,Wt,Hw,Hl,e,outL,O,NH,upright,dock}=ow,t=P.t,gap=24,nestW=40,stack=NH.stack;
-  const viewW=nestW+outL+20,viewH=Wt+gap+Hw+20;
-  const o=[`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-${nestW} -8 ${fmt(viewW)} ${fmt(viewH)}" font-family="system-ui,Arial,sans-serif">`];
-  const wallC='#4a7fa8',floorC='#e8eef2',clampC='#d08c2c',nestC='#f7f4ee';
+  const {P,L,Wt,Hw,Hl,e,outL,O,views}=ow,t=P.t,pad=12;
+  const x0=-Hw-pad,y0=-Hl-pad,vw=outL+2*Hw+2*pad,vh=Wt+2*Hl+2*pad;
+  const o=[`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x0)} ${fmt(y0)} ${fmt(vw)} ${fmt(vh)}" font-family="system-ui,Arial,sans-serif">`];
+  const wallC='#4a7fa8',faceC='#cbdce8',floorC='#e8eef2';
   o.push(`<rect x="0" y="0" width="${fmt(outL)}" height="${fmt(Wt)}" fill="${floorC}"/>`);
   o.push(`<rect x="0" y="0" width="${fmt(t)}" height="${fmt(Wt)}" fill="${wallC}"/><rect x="${fmt(outL-t)}" y="0" width="${fmt(t)}" height="${fmt(Wt)}" fill="${wallC}"/>`);
-  for(const y of [e,e+t+W])o.push(`<rect x="${fmt(t)}" y="${fmt(y)}" width="${fmt(L)}" height="${fmt(t)}" fill="${wallC}"/>`);
-  if(O.lid==='open')o.push(`<rect x="${fmt(t+O.lipW)}" y="${fmt(e+t+O.lipW)}" width="${fmt(L-2*O.lipW)}" height="${fmt(W-2*O.lipW)}" fill="none" stroke="#8c867a" stroke-dasharray="3 2" stroke-width="0.6"/>`);
-  if(O.connect==='direct'&&!upright){
-    o.push(`<rect x="-${nestW}" y="${fmt(Wt/2-P.portPitch/2-20)}" width="${nestW}" height="${fmt(P.portPitch+40)}" fill="${nestC}" stroke="#8c867a" stroke-width="0.6"/>`);
-    o.push(`<text x="-${nestW/2}" y="${fmt(Wt/2)}" font-size="6" text-anchor="middle" fill="#736c60">nest</text>`);
-    for(const s of [-1,1])o.push(`<rect x="${fmt(-borderRow(P)-PIN_L/2-4)}" y="${fmt(Wt/2+s*P.portPitch/2-BAR_W/2)}" width="${fmt(borderRow(P)+PIN_L/2+8+t+KEY_SLOT)}" height="${BAR_W}" fill="${clampC}"/>`);
-  }
-  if(O.connect==='direct'&&upright){
-    // an upright nest seen from above is a thin slab standing beside the wall
-    o.push(`<rect x="-${nestW}" y="${fmt(Wt/2-stack/2)}" width="${nestW}" height="${fmt(stack)}" fill="${nestC}" stroke="#8c867a" stroke-width="0.6"/>`);
-    o.push(`<text x="-${nestW/2}" y="${fmt(Wt/2-stack/2-3)}" font-size="5" text-anchor="middle" fill="#736c60">upright nest</text>`);
-    const c=clipPart(stack,O.clipGrip,ow.reach,t,ow.clipH),x0=-ow.reach,y0=Wt/2-stack/2-ARM+O.clipGrip/2;
-    o.push(`<path d="M${c.poly.map(([x,y])=>`${fmt(x+x0)} ${fmt(y+y0)}`).join('L')}Z" fill="${clampC}" opacity="0.85"/>`);
-  }
-  if(O.connect==='tube')for(const [u,,d] of ow.portHoles)o.push(`<rect x="-${nestW}" y="${fmt(u-O.tubeOD/2)}" width="${nestW}" height="${fmt(O.tubeOD)}" fill="#cfe7d6" stroke="#5c9a6c" stroke-width="0.5"/>`);
-  o.push(`<text x="${fmt(outL/2)}" y="${fmt(Wt/2+2)}" font-size="7" text-anchor="middle" fill="#55606a">${O.lid==='slide'?'sliding lid comes out this way &#8594;':'outworld'}</text>`);
-  // the port wall from the nest side
-  const y0=Wt+gap;
-  o.push(`<text x="0" y="${fmt(y0-4)}" font-size="5" fill="#55606a">Port wall, from the nest side</text>`);
-  const wy=z=>y0+Hw-z,wall=ow.parts.find(p=>p.name==='port wall');
-  o.push(`<rect x="0" y="${fmt(y0)}" width="${fmt(Wt)}" height="${fmt(Hw)}" fill="#cbdce8" stroke="${wallC}" stroke-width="0.6"/>`);
-  o.push(`<line x1="0" y1="${fmt(wy(ow.floorTop))}" x2="${fmt(Wt)}" y2="${fmt(wy(ow.floorTop))}" stroke="#8c867a" stroke-dasharray="2 2" stroke-width="0.4"/>`);
-  // every cut in the wall except the joints with the side walls and floor
-  for(const h of wall.holes){
-    const X=h.map(p=>p[0]-wall.ox),Y=h.map(p=>p[1]-wall.oy),x=Math.min(...X),w=Math.max(...X)-x,y=Math.min(...Y),hh=Math.max(...Y)-y;
-    if(w<t+1&&hh>t+1)continue;
-    if(Math.abs(hh-(t+P.slotClear))<1e-6&&Math.abs(w-10-P.slotClear)<1e-6)continue;
-    o.push(`<rect x="${fmt(x)}" y="${fmt(y0+y)}" width="${fmt(w)}" height="${fmt(hh)}" fill="#fff" stroke="#333" stroke-width="0.4"/>`);
-  }
-  for(const [u,z,dd] of ow.portHoles)o.push(`<circle cx="${fmt(u)}" cy="${fmt(wy(z))}" r="${fmt(dd/2)}" fill="#fff" stroke="#333" stroke-width="0.4"/>`);
-  if(O.lid==='slide')o.push(`<line x1="0" y1="${fmt(wy(Hl))}" x2="${fmt(Wt)}" y2="${fmt(wy(Hl))}" stroke="#8c867a" stroke-width="0.4"/>`);
-  if(dock)o.push(`<text x="${fmt(Wt/2)}" y="${fmt(wy(dock.zc+NH.G.tunnelW/2+ow.clipH+8))}" font-size="4.5" text-anchor="middle" fill="#55606a">${dock.port.id||'port'}</text>`);
+  for(const y of [e,e+t+ow.W])o.push(`<rect x="${fmt(t)}" y="${fmt(y)}" width="${fmt(L)}" height="${fmt(t)}" fill="${wallC}"/>`);
+  if(O.lid==='open')o.push(`<rect x="${fmt(t+O.lipW)}" y="${fmt(e+t+O.lipW)}" width="${fmt(L-2*O.lipW)}" height="${fmt(ow.W-2*O.lipW)}" fill="none" stroke="#8c867a" stroke-dasharray="3 2" stroke-width="0.6"/>`);
+  o.push(`<text x="${fmt(outL/2)}" y="${fmt(Wt/2+2)}" font-size="9" text-anchor="middle" fill="#55606a">${O.lid==='slide'?'sliding lid comes out this way &#8594;':'floor'}</text>`);
+  // where a point (u along the wall, z up it) lands once the wall is folded out
+  const place={back:(u,z)=>[-z,u],front:(u,z)=>[outL+z,u],top:(u,z)=>[t+u,-z],bottom:(u,z)=>[t+u,Wt+z]};
+  const turn={back:-90,front:90,top:0,bottom:0};
+  views.forEach(v=>{
+    const f=place[v.side],a=f(0,0),b=f(v.w,v.h),rx=Math.min(a[0],b[0]),ry=Math.min(a[1],b[1]);
+    o.push(`<rect x="${fmt(rx)}" y="${fmt(ry)}" width="${fmt(Math.abs(b[0]-a[0]))}" height="${fmt(Math.abs(b[1]-a[1]))}" fill="${v.docked?'#f3e3c7':faceC}" stroke="${wallC}" stroke-width="0.6"/>`);
+    for(const [u0,z0,u1,z1] of v.cuts){
+      const p=f(u0,z0),q=f(u1,z1);
+      o.push(`<rect x="${fmt(Math.min(p[0],q[0]))}" y="${fmt(Math.min(p[1],q[1]))}" width="${fmt(Math.abs(q[0]-p[0]))}" height="${fmt(Math.abs(q[1]-p[1]))}" fill="#fff" stroke="#333" stroke-width="0.4"/>`);
+    }
+    for(const [u,z,d] of v.holes){const [cx,cy]=f(u,z);o.push(`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(d/2)}" fill="#fff" stroke="#333" stroke-width="0.4"/>`);}
+    // the name sits near the top edge of each folded wall, turned to read along it
+    const [lx,ly]=f(v.w/2,v.h-8),rot=turn[v.side];
+    const name=v.name.replace(/^./,c=>c.toUpperCase())+(v.docked?`, docks onto ${ow.dock&&ow.dock.port.id?'nest port '+ow.dock.port.id:'a nest'}`:'');
+    o.push(`<text x="${fmt(lx)}" y="${fmt(ly)}" font-size="8" text-anchor="middle" dominant-baseline="middle" fill="#55606a"${rot?` transform="rotate(${rot} ${fmt(lx)} ${fmt(ly)})"`:''}>${name}</text>`);
+  });
   o.push('</svg>');
   return o.join('');
 }

@@ -22,7 +22,7 @@ export const PARAMS=[
  ['Build',true,[
   {k:'orient',l:'Nest orientation',d:'flat',opts:[['flat','Flat (table)'],['upright','Upright (shelf)']],h:'Flat: viewed from the top. Upright: viewed from both faces. Doors and fill holes go on the top sheet (flat) or back sheet (upright).'},
   {k:'doorType',l:'Door type',d:'slide',opts:[['slide','A: sliding door'],['none','None (open tunnels)']]},
-  {k:'fastener',l:'Hold together with',d:'peg',opts:[['peg','Acrylic pegs and keys'],['bolt','Bolts'],['cement','Cement only']]},
+  {k:'fastener',l:'Hold together with',d:'peg',opts:[['peg','Pegs and keys'],['bolt','Bolts'],['cement','Cement only']]},
   {k:'boltSize',l:'Bolt size',d:'M3',opts:[...Object.keys(BOLTS).map(k=>[k,k]),['custom','Custom hole']],h:'Only used with bolts. Sets a clearance hole for that size.'},
   {k:'coverType',l:'Red cover',d:'whole',opts:[['whole','Whole panel'],['none','None']]},
   {k:'joinSlots',l:'Slots for joining panels',d:true,bool:true,h:'Cut on a fixed grid, so any two panels line up.'},
@@ -97,7 +97,7 @@ export const PARAMS=[
   {k:'brood',l:'Brood chambers (2x2)',d:1,step:1},
   {k:'oddShare',l:'Odd-shaped chambers (0 to 1)',d:0,step:0.05,h:'Share of cells joined into odd shapes like 1x2, L and T.'},
   {k:'oddMax',l:'Largest odd chamber (cells)',d:4,step:1},
-  {k:'activeCount',l:'Chambers open at the start (0 = all)',d:0,step:1,h:'Everything is cut either way. The rest start behind closed doors. Must be above 0 for the setting below to do anything.'},
+  {k:'activeCount',l:'Chambers open at the start (0 = all)',d:0,step:1,h:'Everything is cut either way. The rest start behind closed doors.'},
   {k:'growFrom',l:'Starting area grows from',d:'left',opts:[['left','Left'],['right','Right'],['top','Top'],['bottom','Bottom'],['center','Centre']]},
   {k:'tunnelStyle',l:'Tunnel layout',d:'branch',opts:[['branch','Branch out from the brood'],['maze','Random maze']],h:'Branching gives every chamber the shortest way back to the brood chamber. A maze is longer and more winding.'},
   {k:'loops',l:'Extra loop tunnels (0 to 1)',d:0.1,step:0.05,h:'Each one adds a door and a second way round.'},
@@ -137,4 +137,17 @@ const RANGES={W:[60,3000],H:[60,3000],B:[5,100],workerLen:[1,100],queenLen:[1,10
   spongeLen:[1,500],slotW:[0.1,20],fillD:[0.5,50],ventD:[0.1,20],ventGrid:[0,8],seed:[0,1e9],brood:[0,30],oddShare:[0,1],oddMax:[2,12],
   activeCount:[0,1000],bedW:[50,3000],bedH:[50,3000],printW:[20,2000],printD:[20,2000],printH:[5,2000],loops:[0,1],sponges:[0,200],stockW:[50,3000],stockH:[50,3000],diagShare:[0,1],jogShare:[0,1],jogSize:[0,50],joinerQty:[0,50],sensorW:[5,80],sensorH:[5,80],heatW:[3,30],heatLayers:[1,10],heatPitch:[15,300],heatEdgeW:[2,15],heatEdgeLayers:[1,6],vialD:[8,80],vialRings:[1,10],chamfer:[0,40]};
 for(const g of PARAMS)for(const f of g[2])if(RANGES[f.k])f.range=RANGES[f.k];
+const anyEdgeHeat=P=>P.heatTop||P.heatRight||P.heatBottom||P.heatLeft;
+const WHEN={
+  boltSize:P=>P.fastener==='bolt',boltD:P=>P.fastener==='bolt'&&P.boltSize==='custom',pegW:P=>P.fastener==='peg',
+  doorFit:P=>P.doorType!=='none',doorGrip:P=>P.doorType!=='none',lipH:P=>P.orient==='upright',
+  joinerQty:P=>P.joinSlots,coverStand:P=>P.coverType==='whole',growFrom:P=>P.activeCount>0,
+  diagShare:P=>P.angled,jogShare:P=>P.angled,chamfer:P=>P.angled,jogSize:P=>P.angled,
+  heatW:P=>P.heatChannel,heatLayers:P=>P.heatChannel,heatPitch:P=>P.heatChannel,
+  heatEdgeW:anyEdgeHeat,heatEdgeLayers:anyEdgeHeat,bedW:P=>P.bed==='custom',bedH:P=>P.bed==='custom',
+  m_door:P=>P.doorType!=='none',m_saddle:P=>P.doorType!=='none',m_peg:P=>P.fastener==='peg',
+  m_key:P=>P.fastener==='peg'||(P.joinSlots&&P.joinerQty>0),m_joiner:P=>P.joinSlots&&P.joinerQty>0,
+  m_cover:P=>P.coverType==='whole',m_coverLeg:P=>P.coverType==='whole',m_foot:P=>P.orient==='upright',m_heat:P=>P.heatChannel,
+};
+for(const f of PARAMS.flatMap(g=>g[2]))if(WHEN[f.k])f.when=WHEN[f.k];
 export const ALL_FIELDS=PARAMS.flatMap(g=>g[2]);

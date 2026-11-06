@@ -41,6 +41,11 @@ export const RACK_FIELDS=[
   {k:'stockH',l:'Sheet height (mm)',d:400,range:[50,3000]},
   ...RACK_MATS.map(([k,l,h])=>({k:'m_'+k,g:'Materials',l,d:'acrylic',opts:MAT_OPTS,h})),
 ];
+{
+  const labels=R=>R.labels,WHEN={prefix:labels,start:labels,digits:labels,suffix:labels,labelHoles:labels,labelFace:labels,labelCovers:labels,
+    m_lid:R=>R.lid&&R.cover!=='hood',m_hood:R=>R.cover==='hood',m_sheath:R=>R.cover==='sheath',m_cap:R=>R.cover==='caps'};
+  for(const f of RACK_FIELDS)if(WHEN[f.k])f.when=WHEN[f.k];
+}
 export const rackDefaults=()=>Object.fromEntries(RACK_FIELDS.map(f=>[f.k,f.d]));
 export const cleanRack=R=>Object.fromEntries(RACK_FIELDS.map(f=>[f.k,cleanParam(f,f.k in R?R[f.k]:f.d)]));
 
@@ -234,7 +239,8 @@ export function buildRack(input,M={printW:220,printD:220,printH:250}){
   if(R.labels&&R.labelFace&&twoSided&&[2,5,8].some(i=>R['face'+i].trim()))warnings.push('Face text in the middle column will sit close to the tube labels.');
   for(const p of [...parts,...cover].filter(p=>R['m_'+rackKey(p.name)]!=='print'))if(p.w>R.stockW-10||p.h>R.stockH-10)errors.push(`The ${p.name} is ${fmt(p.w)} x ${fmt(p.h)}mm, too big for the ${R.stockW} x ${R.stockH}mm sheet.`);
   if(hood)warnings.push('A hood blocks air and light. Tubes breathe through their cotton, so lift it often to check for condensation or mould.');
-  if(R.cover==='sheath'||R.cover==='caps')warnings.push('Cut covers from red acrylic, the same as the rack. Check each tube can still breathe through its cotton.');
+  const notes=[];
+  if(R.cover==='sheath'||R.cover==='caps')notes.push('Cut covers from red acrylic, the same as the rack. Check each tube can still breathe through its cotton.');
   // printed parts: flat ones by type, covers as one solid piece each
   const pr=k=>R['m_'+k]==='print',prints=[],byName=new Map();
   for(const p of [...parts,...cover]){
@@ -263,7 +269,7 @@ export function buildRack(input,M={printW:220,printD:220,printH:250}){
     if(!fitsPrinter(b,M))errors.push(`The printed ${it.name} is ${fmt(b.w)} x ${fmt(b.d)} x ${fmt(b.h)}mm, too big for the ${M.printW} x ${M.printD} x ${M.printH}mm print area. Set it to acrylic.`);
   }
   const cutParts=parts.filter(p=>!pr(rackKey(p.name))),cutCover=cover.filter(p=>!pr(rackKey(p.name)));
-  return {R,parts,cover,cutParts,cutCover,prints,errors,warnings,Lo,Wo,Hi,D,run,tubes,inset,edge,stops,ends,combs:combs.map(c=>c.x),capOut,capLen,hoodSize,sheathSize,rackH};
+  return {R,parts,cover,cutParts,cutCover,prints,errors,warnings,notes,Lo,Wo,Hi,D,run,tubes,inset,edge,stops,ends,combs:combs.map(c=>c.x),capOut,capLen,hoodSize,sheathSize,rackH};
 }
 
 export function packParts(items,R){

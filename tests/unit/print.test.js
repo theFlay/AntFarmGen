@@ -105,13 +105,13 @@ test('hood and sheath tops are packed at their real width',()=>{
 });
 test('outworld prints: sleeves widen the tube holes, docks get a socket, clips get thicker',()=>{
   const n=run({},1),plain=buildOutworld({},n.P,n.geo),sl=buildOutworld({m_tport:'print',m_tdock:'print'},n.P,n.geo);
-  assert.ok(sl.portHoles[0][2]>plain.portHoles[0][2]);
-  assert.equal(sl.prints.find(p=>p.name==='tube sleeve').qty,1);
+  assert.ok(sl.portHoles[0].d>plain.portHoles[0].d);
+  assert.equal(sl.prints.find(p=>p.name==='tube sleeve').qty,4);
   assert.equal(sl.prints.find(p=>p.name==='tube dock').solids.length,2);
-  const up=run({orient:'upright'},1),thin=buildOutworld({connect:'direct'},up.P,up.geo),thick=buildOutworld({connect:'direct',m_clip:'print'},up.P,up.geo);
+  const up=run({orient:'upright'},1),thin=buildOutworld({dock:'back'},up.P,up.geo),thick=buildOutworld({dock:'back',m_clip:'print'},up.P,up.geo);
   assert.equal(thin.clipH,up.P.t);assert.equal(thick.clipH,5);
   assert.equal(thick.prints.find(p=>p.name==='edge clip').solids[0].z1,5);
-  const everything=buildOutworld({connect:'direct',...all(OUT_MATS)},up.P,up.geo);
+  const everything=buildOutworld({dock:'back',...all(OUT_MATS)},up.P,up.geo);
   assert.match(everything.errors.join(),/print area/);
   for(const f of stls(outworldFiles(everything,{cutColor:'#f00',engraveColor:'#000'})))assert.ok(closed(parse(f.data)).ok,f.name);
 });
@@ -126,4 +126,10 @@ test('a printed vial holder is one piece with its two posts, and no loose posts 
   assert.equal(holder.solids[0].z1,r.P.vialRings*r.G.t);
   assert.ok(!ex.prints.some(p=>/post|ring/.test(p.name)));
   assert.ok(closed(parse(ex.files.find(f=>f.name==='print-vial-holder.stl').data)).ok);
+});
+test('printed tube hole plugs are one piece each, with no loose discs or pins',()=>{
+  const n=run({},1),ow=buildOutworld({m_hplug:'print'},n.P,n.geo);
+  assert.equal(ow.prints.find(p=>p.name==='hole plug').qty,4);
+  assert.ok(!ow.conn.some(p=>/hole plug/.test(p.name)));
+  for(const f of stls(outworldFiles(ow,{cutColor:'#f00',engraveColor:'#000'})))assert.ok(closed(parse(f.data)).ok,f.name);
 });

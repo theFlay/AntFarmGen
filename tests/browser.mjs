@@ -139,7 +139,7 @@ await check('outworld mode builds a box, docks onto the nest and exports a zip',
   assert.equal(await p.isVisible('#preview'),false);
   assert.equal(await p.evaluate(()=>window.__nest.outworld.parts.length),5);
   assert.match(await p.$eval('#outChecks',e=>e.textContent),/Docks fit nest port/);
-  await p.selectOption('#o_connect','direct');
+  await p.selectOption('#o_dock','back');
   await p.selectOption('#o_lid','slide');
   assert.ok(await p.evaluate(()=>window.__nest.outworld.conn.some(c=>c.name==='dock bar')));
   assert.ok(await p.$('#outExports button:has-text("outworld-connectors.svg")'));
@@ -265,12 +265,28 @@ await check('a part set to 3D print becomes an STL in the zip, and a too-big pri
 await check('an upright nest docks onto the outworld with edge clips',async p=>{
   await p.selectOption('#p_orient','upright');
   await p.click('[data-mode="outworld"]');
-  await p.selectOption('#o_connect','direct');
-  assert.equal(await p.evaluate(()=>window.__nest.outworld.conn.filter(c=>c.name==='edge clip').length),2);
+  await p.selectOption('#o_dock','back');
+  assert.equal(await p.evaluate(()=>window.__nest.outworld.conn.filter(c=>c.name==='edge clip').length),4);
   assert.match(await p.$eval('#outChecks',e=>e.textContent),/Docks onto P\d+/);
   await p.locator('#outControls summary:has-text("Materials")').click();
   await p.selectOption('#o_m_clip','print');
-  assert.ok(await p.$('#outExports button:has-text("print-outworld-edge-clip-x2.stl")'));
+  assert.ok(await p.$('#outExports button:has-text("print-outworld-edge-clip-x4.stl")'));
+});
+await check('settings that do nothing with the current choices are hidden',async p=>{
+  const shown=id=>p.isVisible('[data-f="'+id+'"]');
+  assert.equal(await shown('boltSize'),false);
+  await p.selectOption('#p_fastener','bolt');
+  assert.equal(await shown('boltSize'),true);
+  assert.equal(await shown('pegW'),false);
+  await p.click('[data-mode="outworld"]');
+  assert.equal(await shown('lipW'),false);
+  await p.selectOption('#o_lid','open');
+  assert.equal(await shown('lipW'),true);
+  await p.click('[data-mode="rack"]');
+  await p.locator('#rackControls summary:has-text("Tube labels")').click();
+  assert.equal(await shown('prefix'),true);
+  await p.click('#r_labels');
+  assert.equal(await shown('prefix'),false);
 });
 await check('zip export works with no network',async p=>{
   const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#zipAll')]);
