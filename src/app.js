@@ -132,6 +132,12 @@ function render(){
     ['Wall sheets',`${ex.stripSheets} at ${P.stockW} x ${P.stockH}`],['Frame',`${geo.frame.length} pieces x ${P.layers} layers`],
     ['Ports that always line up',lineUp()],['Doors',`${geo.doors.length} (${geo.doors.filter(d=>d.closed).length} start closed)`],['Fasteners',`${geo.fasteners.length} ${P.fastener==='peg'?'pegs and keys':P.fastener==='bolt'?`${P.boltSize==='custom'?'':P.boltSize+' '}bolts, ${boltLength(G,P)}mm or longer`:''}`],['3D prints',ex.prints.length?`${ex.prints.length} STL file${ex.prints.length>1?'s':''}`:'none'],['Panel joiners',geo.joints.length?`${Math.round(P.joinerQty||0)} clips, ${geo.joints.length} slots`:'no slots'],['Ports cut',`${geo.ports.filter(p=>p.cut).length} (${geo.ports.filter(p=>p.cut&&p.active).length} live)`],
   ];
+  if(P.build==='printed'){
+    const drop=new Set(['Strip parts','Wall sheets','Frame','Fasteners','Panel joiners']);
+    for(let i=st.length-1;i>=0;i--)if(drop.has(st[i][0]))st.splice(i,1);
+    const n=ex.prints.filter(p=>/^body/.test(p.name)).length;
+    st.push(['Printed body',n>1?`${n} tiles`:'one piece']);
+  }
   document.getElementById('stats').innerHTML=st.map(([a,b])=>`<div${a.startsWith('Ports that')?' class="wide"':''}><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
   document.getElementById('derived').textContent=`Pitch target ${f1(G.pitch)}mm, actual cells ${f1(G.cellW)} x ${f1(G.cellH)}mm, tunnels ${f1(G.tunnelW)}mm wide, depth ${f1(G.depth)}mm.${G.adjusted?' Cell count nudged so ports miss the walls.':''}`;
   const exDiv=document.getElementById('exports');

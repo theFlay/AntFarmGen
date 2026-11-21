@@ -3,6 +3,7 @@ import {spongeLength} from './generate.js';
 import {heatFrameLayers} from './heat.js';
 import {coverStand,JOINER_RISE} from './hardware.js';
 import {printPlan} from './export.js';
+import {printedBody} from './printedbody.js';
 import {solidBounds,fitsPrinter} from './stl.js';
 import {NEST_MATS,printed} from './params.js';
 import {f1} from './util.js';
@@ -87,9 +88,10 @@ export function checkRules(G,L,P,geo){
   if(plugs)msgs.push(['info',`${plugs} port(s) are cut, ${usedN} marked in use, so ${plugs-usedN} need plugs (${live.length} open into the starting area).`]);
   if(closed&&geo.doors.length)msgs.push(['info',`${closed} door(s) start closed.`]);
   if(closed&&!geo.doors.length)msgs.push(['warn',`${closed} tunnel(s) lead out of the starting area but there are no doors to close them.`]);
-  const noTabs=geo.pieces.filter(pc=>pc.notches.length&&!pc.top.length).length;
+  const pbuild=P.build==='printed';
+  const noTabs=pbuild?0:geo.pieces.filter(pc=>pc.notches.length&&!pc.top.length).length;
   if(noTabs)msgs.push(['warn',`${noTabs} tunnel strip(s) are too short for tabs. Shorten the tab length or glue them.`]);
-  if(geo.minWeb<1)msgs.push(['warn',`Two cuts in a sheet are only ${geo.minWeb.toFixed(2)}mm apart and may crack.`]);
+  if(!pbuild&&geo.minWeb<1)msgs.push(['warn',`Two cuts in a sheet are only ${geo.minWeb.toFixed(2)}mm apart and may crack.`]);
   if(geo.edgeHeat){
     const ph=G.depth-heatFrameLayers(P)*G.t;
     if(ph<G.tunnelH)msgs.push(['warn',`Ports are only ${ph}mm tall above the heat layer, lower than the ${G.tunnelH}mm tunnels.`]);
@@ -105,14 +107,20 @@ export function checkRules(G,L,P,geo){
     if(cutSheets&&!fits(P.W,P.H))msgs.push(['error',`A ${P.W} x ${P.H}mm panel is too big for the ${bed[2]} (${bed[0]} x ${bed[1]}mm).`]);
     if(!fits(P.stockW,P.stockH))msgs.push(['error',`${P.stockW} x ${P.stockH}mm stock is too big for the ${bed[2]} (${bed[0]} x ${bed[1]}mm).`]);
   }
-  const nPrint=NEST_MATS.filter(([k])=>printed(P,k)).length;
+  if(pbuild){
+    const pb=printedBody(G,L,P,geo);
+    for(const m of pb.errors)msgs.push(['error',m]);
+    for(const m of pb.warnings)msgs.push(['warn',m]);
+    for(const m of pb.notes)msgs.push(['info',m]);
+  }
+  const nPrint=pbuild?0:NEST_MATS.filter(([k])=>printed(P,k)).length;
   if(nPrint){
     const items=printPlan(G,L,P,geo);
     for(const m of printProblems(items,P))msgs.push(['error',m]);
     msgs.push(['info',`${nPrint} part type${nPrint>1?'s are':' is'} set to 3D print, giving ${items.length} STL file${items.length===1?'':'s'}. Printed parts match the acrylic sizes with no kerf offset, so print one first and check it fits.`]);
   }
   if(geo.heat)msgs.push(['info','Heat channel added. Always run the cable from a thermostat, and keep it well below the point where acrylic softens. Keep part of the nest unheated so the ants can choose.']);
-  const shortA=geo.pieces.filter(p=>p.kind==='angle'&&!p.top.length).length;
+  const shortA=pbuild?0:geo.pieces.filter(p=>p.kind==='angle'&&!p.top.length).length;
   if(shortA)msgs.push(['warn',`${shortA} angled strip(s) are too short for tabs and rely on glue alone. A larger jog size fixes this.`]);
   if(P.ceilingFinish==='frosted')msgs.push(['info','A frosted top or front sheet blurs the view into the nest.']);
   const nAngle=geo.pieces.filter(p=>p.kind==='angle').length;

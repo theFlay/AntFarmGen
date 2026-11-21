@@ -41,6 +41,7 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 - Heat: floor channel (flat only), and border heat on any of the four borders (flat or upright).
 - Settings that do nothing with the current choices are hidden, such as bolt size with pegs. On a phone, each page has a Jump to settings link.
 - SVG and optional DXF export, laser bed checks for the Speedy 300 and 360, save and load layouts, and the fit test piece.
+- **Build: printed body, acrylic sheets** (`src/printedbody.js`). The floor, frame and walls print as one piece, made from the same wall pieces as the acrylic strips, so every layout tool still works. Tunnels are notched from the top of the print, with the same sill. Sponge pocket vent slots become printed slits, filled through the top sheet. Ports are channels through the border, the full depth, with printed plugs, and a printed adaptor that holds a tube (12mm by default) for each port in use. Doors are optional, as before (Door type None). Flat: a tray with a printed floor, and the top sheet drops into a recess half the border wide, with an optional finger notch. Upright: the frame and walls only, a full sheet each side, held by printed edge clips and two printed feet placed clear of the ports. A body too big for the printer splits into tiles along wall lines, so each seam runs down the middle of a wall. Pegs, joiner slots and cover sockets are left out. Heat, sensors, pillars, vial holders, water chambers and angled walls are refused for now. Docking an outworld needs the acrylic build.
 
 **Test tube rack**
 - One or two sided, from tube diameter, length, stick-out and count. Tubes lie flat through end plate holes, rest in combs, and stop at a wall.
@@ -103,8 +104,8 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 
 - A custom Exo Terra lid (waiting on a tube size).
 - A printed fit test piece. Printed parts have no fit tuning of their own yet.
-- Splitting a printed part that is too big for the printer, except the outworld's printed base and rim. Others must be set to acrylic.
-- A printed body for the Nest panel (back sheet, frame and walls as one print, with an acrylic top sheet), flat or upright. The owner asked for it. Still to agree: how the top sheet fastens to a printed body, and how doors, sponge pockets, sensors, heat and water chambers carry over. Angled shapes would have to be off.
+- Splitting a printed part that is too big for the printer, except the outworld's printed base and rim, and the printed nest body. Others must be set to acrylic.
+- Heat, sensors, pillars, vial holders, water chambers, angled walls and outworld docking on a printed nest body.
 - Engraved text on printed parts, and a snap catch for the edge clips.
 - A ramp for an upright nest's port, which can be well above the outworld floor.
 - More door types. `src/doors.js` is set up for them.
@@ -115,7 +116,7 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 
 ## Least proven
 
-The starter nest has not been printed yet: the grille slit width, socket and lid clearances, and whether the tower keeps the chamber damp without flooding it are first guesses. So are the printed base's groove clearance, the rim and the corner clip grip.
+The starter nest has not been printed yet: the grille slit width, socket and lid clearances, and whether the tower keeps the chamber damp without flooding it are first guesses. So are the printed base's groove clearance, the rim and the corner clip grip, and on the printed nest body the sheet recess, tile seams, edge clip grip, plug and adaptor fit.
 
 The angled joints, the saddle fit on upright nests, the heat groove rim, water chamber sealing, the outworld dock clamp, the edge clip grip, the sliding lid, and every printed part's fit. Peg, key, plug, lip, dock bar, dock pin, dock key, clip and sleeve sizes are first guesses.
 
@@ -131,7 +132,7 @@ node tests/live.mjs "text on the page"   # checks the live site
 
 - Edit `src/`, then run `npm run build`. Never edit `index.html` by hand.
 - Every push to `develop` is tested by `.github/workflows/pages.yml`, and only goes live if the tests pass.
-- Current state: 211 unit tests plus the browser tests, all passing.
+- Current state: 219 unit tests plus the browser tests, all passing.
 - After a change, look at rendered output as well as the tests. Several real bugs were only found that way.
 
 ## Project rules

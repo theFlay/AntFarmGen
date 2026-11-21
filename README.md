@@ -36,6 +36,7 @@ Edit the code in `src/`, then run `npm run build` to rebuild `index.html`. Do no
 | `src/export.js` | SVG cut files and the fit test piece |
 | `src/rack.js` | Test tube racks |
 | `src/outworld.js` | Outworlds, all acrylic or on a printed base |
+| `src/printedbody.js` | A nest panel as one printed body with acrylic sheets |
 | `src/starter.js` | The 3D printed starter nest and tube gauge |
 | `src/stl.js` | STL output, including solids built from boxes |
 | `src/draw.js` | Preview and assembly map |

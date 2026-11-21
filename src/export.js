@@ -9,6 +9,7 @@ import {escapeHtml} from './sanitize.js';
 import {hardwareParts,pegPart,keyPart,PEG_FIT,JOIN_LEG} from './hardware.js';
 import {boltDia,printed} from './params.js';
 import {recorder,shapesToSolids,partSolid,printFile} from './stl.js';
+import {printedBody} from './printedbody.js';
 
 /* ---------------- export ---------------- */
 export function svgDoc(w,h,body,title){
@@ -142,6 +143,12 @@ export function printPlan(G,L,P,geo){
   return items;
 }
 export function exporters(G,L,P,geo){
+  if(P.build==='printed'){
+    const pb=printedBody(G,L,P,geo),files=[...pb.files];
+    files.push({name:'assembly-map.svg',data:`<?xml version="1.0" encoding="UTF-8"?>\n`+drawTopdown(G,L,P,geo,null,{labels:true,mm:true})});
+    if(P.exportDxf)for(const f of pb.files.filter(f=>f.name.endsWith('.svg')))files.push({name:f.name.replace('.svg','.dxf'),data:svgToDxf(f.data)});
+    return {files,stripSheets:0,kit:[],prints:pb.prints};
+  }
   const d=pen(P);
   const W=P.W,H=P.H;
   const files=[];

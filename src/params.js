@@ -21,6 +21,10 @@ export const PARAMS=[
  ]],
  ['Build',true,[
   {k:'orient',l:'Nest orientation',d:'flat',opts:[['flat','Flat (table)'],['upright','Upright (shelf)']],h:'Flat: viewed from the top. Upright: viewed from both faces. Doors and fill holes go on the top sheet (flat) or back sheet (upright).'},
+  {k:'build',l:'Build',d:'acrylic',opts:[['acrylic','All acrylic, cut and layered'],['printed','Printed body, acrylic sheets']],h:'Printed body: the floor, frame and walls print as one piece, split into tiles along wall lines if too big. Flat nests get a drop-in top sheet. Upright nests get a sheet each side, held by printed clips.'},
+  {k:'liftNotch',l:'Finger notch to lift the top sheet',d:true,bool:true},
+  {k:'pbFloor',l:'Printed floor (mm)',d:2,step:0.1},
+  {k:'pbTubeOD',l:'Port adaptor tube outside diameter (mm)',d:12,step:0.5,h:'Each port in use gets a printed adaptor that holds this tube. 12 matches the Outworld page.'},
   {k:'doorType',l:'Door type',d:'slide',opts:[['slide','A: sliding door'],['none','None (open tunnels)']]},
   {k:'fastener',l:'Hold together with',d:'peg',opts:[['peg','Pegs and keys'],['bolt','Bolts'],['cement','Cement only']]},
   {k:'boltSize',l:'Bolt size',d:'M3',opts:[...Object.keys(BOLTS).map(k=>[k,k]),['custom','Custom hole']],h:'Only used with bolts. Sets a clearance hole for that size.'},
@@ -133,15 +137,17 @@ export const GEN_KEYS=new Set(['chamfer','broodPillar','seed','brood','oddShare'
 export // sane limits, which also stop a bad value from freezing the page
 const RANGES={W:[60,3000],H:[60,3000],B:[5,100],workerLen:[1,100],queenLen:[1,100],queenWidth:[1,100],pitchFactor:[1,10],tunnelW:[1,100],
   t:[0.5,20],layers:[1,20],S:[0.5,20],tunnelH:[1,200],tabL:[2,100],tabPitch:[5,500],kerf:[0,2],slotClear:[-2,2],doorFit:[0,2],doorGrip:[3,30],
-  lipH:[0,30],pegW:[4,30],coverStand:[1,100],portPitch:[0,2000],portOffset:[0,2000],boltD:[1,30],boltSpacing:[10,1000],spongeD:[1,100],
+  lipH:[0,30],pbFloor:[1,6],pbTubeOD:[4,30],pegW:[4,30],coverStand:[1,100],portPitch:[0,2000],portOffset:[0,2000],boltD:[1,30],boltSpacing:[10,1000],spongeD:[1,100],
   spongeLen:[1,500],slotW:[0.1,20],fillD:[0.5,50],ventD:[0.1,20],ventGrid:[0,8],seed:[0,1e9],brood:[0,30],oddShare:[0,1],oddMax:[2,12],
   activeCount:[0,1000],bedW:[50,3000],bedH:[50,3000],printW:[20,2000],printD:[20,2000],printH:[5,2000],loops:[0,1],sponges:[0,200],stockW:[50,3000],stockH:[50,3000],diagShare:[0,1],jogShare:[0,1],jogSize:[0,50],joinerQty:[0,50],sensorW:[5,80],sensorH:[5,80],heatW:[3,30],heatLayers:[1,10],heatPitch:[15,300],heatEdgeW:[2,15],heatEdgeLayers:[1,6],vialD:[8,80],vialRings:[1,10],chamfer:[0,40]};
 for(const g of PARAMS)for(const f of g[2])if(RANGES[f.k])f.range=RANGES[f.k];
 const anyEdgeHeat=P=>P.heatTop||P.heatRight||P.heatBottom||P.heatLeft;
+const acr=P=>P.build!=='printed',pbFlat=P=>P.build==='printed'&&P.orient==='flat';
 const WHEN={
-  boltSize:P=>P.fastener==='bolt',boltD:P=>P.fastener==='bolt'&&P.boltSize==='custom',pegW:P=>P.fastener==='peg',
+  liftNotch:pbFlat,pbFloor:pbFlat,pbTubeOD:P=>!acr(P),fastener:acr,coverType:acr,joinSlots:acr,
+  boltSize:P=>acr(P)&&P.fastener==='bolt',boltD:P=>acr(P)&&P.fastener==='bolt'&&P.boltSize==='custom',pegW:P=>acr(P)&&P.fastener==='peg',
   doorFit:P=>P.doorType!=='none',doorGrip:P=>P.doorType!=='none',lipH:P=>P.orient==='upright',
-  joinerQty:P=>P.joinSlots,coverStand:P=>P.coverType==='whole',growFrom:P=>P.activeCount>0,
+  joinerQty:P=>acr(P)&&P.joinSlots,coverStand:P=>acr(P)&&P.coverType==='whole',tabL:acr,tabPitch:acr,slotClear:acr,growFrom:P=>P.activeCount>0,
   diagShare:P=>P.angled,jogShare:P=>P.angled,chamfer:P=>P.angled,jogSize:P=>P.angled,
   heatW:P=>P.heatChannel,heatLayers:P=>P.heatChannel,heatPitch:P=>P.heatChannel,
   heatEdgeW:anyEdgeHeat,heatEdgeLayers:anyEdgeHeat,bedW:P=>P.bed==='custom',bedH:P=>P.bed==='custom',
@@ -149,5 +155,7 @@ const WHEN={
   m_key:P=>P.fastener==='peg'||(P.joinSlots&&P.joinerQty>0),m_joiner:P=>P.joinSlots&&P.joinerQty>0,
   m_cover:P=>P.coverType==='whole',m_coverLeg:P=>P.coverType==='whole',m_foot:P=>P.orient==='upright',m_heat:P=>P.heatChannel,
 };
+// a printed body is one print, so the cut-or-print choice only stays for doors and saddles
+for(const [k] of NEST_MATS)if(k!=='door'&&k!=='saddle'){const w=WHEN['m_'+k];WHEN['m_'+k]=w?P=>acr(P)&&w(P):acr;}
 for(const f of PARAMS.flatMap(g=>g[2]))if(WHEN[f.k])f.when=WHEN[f.k];
 export const ALL_FIELDS=PARAMS.flatMap(g=>g[2]);

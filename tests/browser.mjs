@@ -151,6 +151,20 @@ await check('outworld mode builds a box, docks onto the nest and exports a zip',
   const [t]=await Promise.all([p.waitForEvent('download'),p.click('#outTest')]);
   assert.equal(t.suggestedFilename(),'tube-hole-test.svg');
 });
+await check('a nest panel can be a printed body with acrylic sheets',async p=>{
+  assert.equal(await p.isVisible('#controls [data-f="liftNotch"]'),false);
+  await p.selectOption('#p_build','printed');
+  assert.equal(await p.isVisible('#controls [data-f="liftNotch"]'),true);
+  assert.equal(await p.isVisible('#controls [data-f="fastener"]'),false);
+  assert.ok(await p.$('#exports button:has-text("top-sheet.svg")'));
+  assert.ok(await p.$('#exports button:has-text("print-body-tile-a1.stl")'));
+  assert.equal(await p.$('#exports button:has-text("frame-layer")'),null);
+  await p.selectOption('#p_orient','upright');
+  assert.equal(await p.isVisible('#controls [data-f="liftNotch"]'),false);
+  assert.ok(await p.$('#exports button:has-text("back-sheet.svg")'));
+  assert.ok(await p.$('#exports button:has-text("print-foot-x2.stl")'));
+  assert.match(await p.$eval('#pill',e=>e.textContent),/Ready/);
+});
 await check('the outworld can be built on a printed base',async p=>{
   await p.click('[data-mode="outworld"]');
   assert.equal(await p.isVisible('#outControls [data-f="pRim"]'),false);

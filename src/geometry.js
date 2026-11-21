@@ -23,6 +23,8 @@ export function tabPositions(len,notches,G,P,tl=P.tabL){
 }
 
 export function buildGeometry(G,L,P){
+  // a printed body has no pegs, joiner slots or cover sockets in its border
+  if(P.build==='printed')P={...P,fastener:'cement',joinSlots:false,coverType:'none'};
   const {t,depth,xs,ys,cols,rows,cellW,cellH,tunnelW,tunnelH}=G;
   const B=P.B,W=P.W,H=P.H,D=P.spongeD;
   const errors=[],warnings=[];
