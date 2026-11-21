@@ -26,11 +26,16 @@ export const STARTER_FIELDS=[
   {k:'towerD',g:'Water',l:'Water tower outside diameter (mm)',d:16,step:0.5,range:[6,40],h:'A test tube or small vial, stood open end down on a piece of sponge.'},
   {k:'towerH',g:'Water',l:'Water tower socket height (mm)',d:30,step:1,range:[10,120]},
   {k:'grille',g:'Water',l:'Grille slit width (mm)',d:0.8,step:0.05,range:[0.3,3],h:'Water reaches the chamber through these slits. Keep them narrower than the head of your smallest worker. A 0.4mm nozzle prints down to about 0.6.'},
-  {k:'lidNest',g:'Lids',l:'Nest lid',d:'acrylic',opts:LID_OPTS,h:'Red acrylic lets you watch without disturbing them.'},
+  {k:'lidNest',g:'Lids',l:'Nest lid',d:'acrylic',opts:LID_OPTS,h:'The clear sheet that keeps the ants in.'},
+  {k:'redSheet',g:'Lids',l:'Red sheet over the nest lid',d:true,bool:true,h:'The nest recess is two sheets deep. Lift the red sheet to look in, and the clear one still keeps the ants in.'},
   {k:'lidOw',g:'Lids',l:'Outworld lid',d:'acrylic',opts:LID_OPTS},
   {k:'lidT',g:'Lids',l:'Lid thickness, measured (mm)',d:3,step:0.1,range:[1,8],h:'Each lid drops into a recess this deep, so it sits flush.'},
-  {k:'ventD',g:'Lids',l:'Outworld lid vent holes (mm)',d:1,step:0.1,range:[0,4],h:'0 for none. Smaller than the head of your smallest worker.'},
+  {k:'vents',g:'Lids',l:'Outworld lid vents',d:'slits',opts:[['slits','Slits along the long sides'],['holes','A grid of holes'],['none','None']]},
+  {k:'slitW',g:'Lids',l:'Vent slit width (mm)',d:0.8,step:0.05,range:[0.3,3],h:'Three slits along each long side. Narrower than the head of your smallest worker.'},
+  {k:'ventD',g:'Lids',l:'Vent hole diameter (mm)',d:1,step:0.1,range:[0.3,4],h:'Smaller than the head of your smallest worker.'},
   {k:'ventPitch',g:'Lids',l:'Vent hole spacing (mm)',d:8,step:1,range:[3,40]},
+  {k:'hatch',g:'Lids',l:'Feeding hatch in the outworld lid',d:true,bool:true,h:'A square hole with a printed hatch that drops into it, and a small acrylic window in its top, so you can feed without lifting the lid.'},
+  {k:'hatchSize',g:'Lids',l:'Feeding hatch hole (mm)',d:18,step:1,range:[10,60]},
   {k:'wall',g:'Printing',l:'Outer wall (mm)',d:3.2,step:0.1,range:[2,8],h:'Half of it is the ledge each lid rests on.'},
   {k:'inner',g:'Printing',l:'Inner walls (mm)',d:2,step:0.1,range:[1,6]},
   {k:'floor',g:'Printing',l:'Floor (mm)',d:2,step:0.1,range:[1,6]},
@@ -38,13 +43,15 @@ export const STARTER_FIELDS=[
   {k:'lidClear',g:'Printing',l:'Lid clearance (mm)',d:0.4,step:0.05,range:[0,2],h:'Taken off each lid, so it drops in.'},
 ];
 {
-  const WHEN={ventD:S=>S.lidOw==='acrylic',ventPitch:S=>S.lidOw==='acrylic'&&S.ventD>0,towerD:S=>S.towers>0,towerH:S=>S.towers>0,grille:S=>S.towers>0};
+  const acr=S=>S.lidOw==='acrylic';
+  const WHEN={vents:acr,slitW:S=>acr(S)&&S.vents==='slits',ventD:S=>acr(S)&&S.vents==='holes',ventPitch:S=>acr(S)&&S.vents==='holes',hatch:acr,hatchSize:S=>acr(S)&&S.hatch,towerD:S=>S.towers>0,towerH:S=>S.towers>0,grille:S=>S.towers>0};
   for(const f of STARTER_FIELDS)if(WHEN[f.k])f.when=WHEN[f.k];
 }
 export const starterDefaults=()=>Object.fromEntries(STARTER_FIELDS.map(f=>[f.k,f.d]));
 export const cleanStarter=S=>Object.fromEntries(STARTER_FIELDS.map(f=>[f.k,cleanParam(f,f.k in S?S[f.k]:f.d)]));
 
 // fixed sizes, first guesses until a test print
+const HATCH_FIT=0.4,HATCH_WALL=1.6,HATCH_FLANGE=4,HATCH_LEDGE=1.5,SLIT_EDGE=3,SLIT_PITCH=2.2;
 const SOCK_WALL=2.4,SOCK_LEN=12,TOWER_WALL=2,TOWER_CLEAR=1,NOTCH=12,PLUG_FLANGE=2;
 export const GAUGE=[13,13.5,14,14.5,15,15.5,16,16.5,17,17.5,18,18.5,19,19.5,20];
 
@@ -53,7 +60,7 @@ export function buildStarter(input,M={printW:220,printD:220,printH:250}){
   const S=cleanStarter(input),errors=[],warnings=[],notes=[];
   const w=S.wall,F=S.floor,wi=S.inner,ledge=w/2,Lx=S.L,Ly=S.Wd,tW=S.tunnelW,lc=S.lidClear;
   const dx0=w+S.owLen,dx1=dx0+w;                 // outworld inside end, then the divider
-  const nestH=F+S.chH+S.lidT,owH=S.owH;
+  const nestRecess=S.lidT*(S.redSheet?2:1),nestH=F+S.chH+nestRecess,owH=S.owH;
   const cx0=dx1+ledge,cx1=Lx-w,n=S.chambers;
   const bh=(Ly-2*w-(n-1)*wi)/n;
   if(cx1-cx0<20)errors.push(`The nest is only ${f1(cx1-cx0)}mm long inside. Make the tray longer or the outworld shorter.`);
@@ -89,10 +96,10 @@ export function buildStarter(input,M={printW:220,printD:220,printH:250}){
   if(cx1-cx0<tW+6)errors.push('The nest is too short for its tunnels.');
   // finger notches in the back wall, to lift each lid
   const notches=[];
-  for(const [xa,xb,top] of [[w,dx0,owH],[cx0,cx1,nestH]]){
+  for(const [xa,xb,top,deep] of [[w,dx0,owH,S.lidT],[cx0,cx1,nestH,nestRecess]]){
     const xc=(xa+xb)/2;
     notches.push({x0:xc-NOTCH/2,x1:xc+NOTCH/2});
-    sub.push([xc-NOTCH/2,-1,top-S.lidT,xc+NOTCH/2,w-ledge,top+1]);
+    sub.push([xc-NOTCH/2,-1,top-deep,xc+NOTCH/2,w-ledge,top+1]);
   }
 
   // water towers: a socket on the end wall, damp through a grille of slits into the chamber
@@ -165,19 +172,53 @@ export function buildStarter(input,M={printW:220,printD:220,printH:250}){
 
   // lids drop into the recesses, so each is the recess less the clearance
   const lids=[];
-  const owLid={name:'outworld lid',kind:S.lidOw,w:dx0-w+2*ledge-lc,h:Ly-2*w+2*ledge-lc,circles:[]};
-  const nestLid={name:'nest lid',kind:S.lidNest,w:Lx-w+ledge-dx1-lc,h:Ly-2*w+2*ledge-lc,circles:[]};
-  if(S.lidOw==='acrylic'&&S.ventD>0){
+  const owLid={name:'outworld lid',kind:S.lidOw,w:dx0-w+2*ledge-lc,h:Ly-2*w+2*ledge-lc,circles:[],holes:[]};
+  const nestLid={name:'nest lid',kind:S.lidNest,w:Lx-w+ledge-dx1-lc,h:Ly-2*w+2*ledge-lc,circles:[],holes:[]};
+  const extra=[];
+  if(S.redSheet)extra.push({name:'nest red sheet',kind:'acrylic',w:nestLid.w,h:nestLid.h,circles:[],holes:[]});
+  // three slits along each long side, most of its length, like the bought nests
+  let band=0;
+  if(S.lidOw==='acrylic'&&S.vents==='slits'){
+    const along=owLid.h>=owLid.w,Lg=along?owLid.h:owLid.w,Sh=along?owLid.w:owLid.h,end=Lg*0.1;
+    band=SLIT_EDGE+2*SLIT_PITCH+S.slitW;
+    if(Sh<2*band+10)errors.push('The outworld lid is too narrow for vent slits. Use holes.');
+    for(const e of [0,1])for(let k=0;k<3;k++){
+      const a=SLIT_EDGE+k*SLIT_PITCH,c0=e?Sh-a-S.slitW:a;
+      owLid.holes.push(along?rectPts(c0,end,c0+S.slitW,Lg-end):rectPts(end,c0,Lg-end,c0+S.slitW));
+    }
+    if(S.slitW>=1)warnings.push(`The vent slits are ${fmt(S.slitW)}mm wide. Small workers may get through.`);
+  }
+  // a feeding hatch: a square hole, a printed hatch that drops in, and a small window in its top
+  let hatch=null;
+  if(S.lidOw==='acrylic'&&S.hatch){
+    const hs=S.hatchSize,cx=owLid.w/2,cy=owLid.h/2,short=Math.min(owLid.w,owLid.h);
+    if(hs>short-2*band-2)errors.push(`A ${fmt(hs)}mm feeding hatch does not fit between the vent slits. It can be up to ${f1(Math.max(0,short-2*band-2))}mm.`);
+    owLid.holes.push(rectPts(cx-hs/2,cy-hs/2,cx+hs/2,cy+hs/2));
+    const plug=hs-HATCH_FIT,view=plug-2*HATCH_WALL,flange=hs+2*HATCH_FLANGE,win=view+2*HATCH_LEDGE,tf=S.lidT+HATCH_LEDGE;
+    if(view<6)errors.push('The feeding hatch is too small for a window. Make it bigger.');
+    // printed plug side down: the plug, then the flange, with the window recess in its top
+    const o=v=>-v/2,p2=v=>v/2;
+    const tris=meshBoxes([[o(plug),o(plug),0,p2(plug),p2(plug),S.lidT],[o(flange),o(flange),S.lidT,p2(flange),p2(flange),S.lidT+tf]],
+      [[o(view),o(view),-1,p2(view),p2(view),S.lidT+tf+1],[o(win),o(win),S.lidT+tf-S.lidT,p2(win),p2(win),S.lidT+tf+1]]);
+    hatch={hs,plug,view,flange,win,tris};
+    extra.push({name:'hatch window',kind:'acrylic',w:win-0.3,h:win-0.3,circles:[],holes:[]});
+  }
+  if(S.lidOw==='acrylic'&&S.vents==='holes'){
     const m=6,cols=Math.floor((owLid.w-2*m)/S.ventPitch)+1,rows=Math.floor((owLid.h-2*m)/S.ventPitch)+1;
     const ox=(owLid.w-(cols-1)*S.ventPitch)/2,oy=(owLid.h-(rows-1)*S.ventPitch)/2;
-    if(cols>0&&rows>0)for(let i=0;i<cols;i++)for(let j=0;j<rows;j++)owLid.circles.push([ox+i*S.ventPitch,oy+j*S.ventPitch,S.ventD]);
+    // none under the hatch flange
+    const clear=hatch?hatch.flange/2+1:-1,free=(x,y)=>Math.abs(x-owLid.w/2)>clear||Math.abs(y-owLid.h/2)>clear;
+    if(cols>0&&rows>0)for(let i=0;i<cols;i++)for(let j=0;j<rows;j++)if(free(ox+i*S.ventPitch,oy+j*S.ventPitch))owLid.circles.push([ox+i*S.ventPitch,oy+j*S.ventPitch,S.ventD]);
     if(S.ventD>2)warnings.push('Vent holes over 2mm let most small workers out.');
   }
-  if(S.lidOw==='glass')notes.push('A glass outworld lid has no vent holes. Prop it open a little or drill it.');
-  for(const l of [owLid,nestLid])lids.push({...l,poly:rectPts(0,0,l.w,l.h),holes:[]});
+  if(S.lidOw==='glass')notes.push('A glass outworld lid has no vents or feeding hatch. Prop it open a little or drill it.');
+  for(const l of [owLid,nestLid,...extra])lids.push({...l,poly:rectPts(0,0,l.w,l.h)});
+  if(hatch)prints.push({name:'starter feeding hatch',qty:1,tris:hatch.tris});
 
   if(S.towers)notes.push('Put a small piece of sponge in the bottom of each water tower socket. Fill a tube with water, plug it with cotton, and stand it open end down on the sponge. The grille keeps the chamber behind it damp.');
-  if(S.lidNest==='acrylic')notes.push('Cut the nest lid from red acrylic, so the colony stays calm when you look in.');
+  if(S.redSheet)notes.push(`Cut the nest lid from clear ${S.lidNest==='glass'?'glass':'acrylic'} and the sheet over it from red acrylic. Lift the red one to look in.`);
+  else if(S.lidNest==='acrylic')notes.push('Cut the nest lid from red acrylic, so the colony stays calm when you look in.');
+  if(hatch)notes.push('Print the feeding hatch plug side down. Press the small window into the recess in its top.');
   notes.push('Coat the top 10mm of the outworld walls with a barrier such as Fluon, so ants stay in when the lid is off.');
   notes.push('Prints upright with no supports. PETG copes with damp better than PLA.');
   if(S.grille>=1)warnings.push(`The grille slits are ${fmt(S.grille)}mm wide. Small workers may get through. Check against your smallest worker.`);
@@ -185,13 +226,14 @@ export function buildStarter(input,M={printW:220,printD:220,printH:250}){
   // footprint with everything that sticks out
   const outW=Lx+(sockets.some(s=>s.wall==='end')?SOCK_LEN:0)+(towers.length?ts:0),outD=Ly+(sockets.some(s=>s.wall!=='end')?SOCK_LEN:0);
   return {S,errors,warnings,notes,prints,lids,ch,doors,towers,sockets,notches,
-    Lx,Ly,w,F,dx0,dx1,ledge,nestH,owH,bh,cx0,cx1,outW,outD};
+    Lx,Ly,w,F,dx0,dx1,ledge,nestH,owH,bh,cx0,cx1,outW,outD,hatch,nestRecess};
 }
 
 export function starterFiles(st,P={kerf:0.15,cutColor:'#ff0000',engraveColor:'#000000'}){
   const files=[],d=pen({kerf:P.kerf,cutColor:P.cutColor,engraveColor:P.engraveColor});
   for(const l of st.lids.filter(l=>l.kind==='acrylic')){
     const b=[d.outline(l.poly)];
+    for(const h of l.holes)b.push(d.cutout(h));
     for(const [x,y,dia] of l.circles)b.push(d.hole(x,y,dia));
     files.push({name:`starter-${l.name.replace(/ /g,'-')}.svg`,data:svgDoc(l.w,l.h,b.join('\n'),`Starter nest ${l.name}`)});
   }
@@ -228,7 +270,12 @@ export function starterPreview(st){
     rect(...bore,s.name==='test tube'?'#1b6fd0':'#2fb37a');
   }
   for(const nn of notches)rect(nn.x0,0,nn.x1,w/2,'#a8a093');
-  text((w+dx0)/2,Ly/2-6,'Outworld',4.5);
+  if(st.hatch){
+    const c=[(w+dx0)/2,Ly/2],f=st.hatch.flange/2,v=st.hatch.view/2;
+    rect(c[0]-f,c[1]-f,c[0]+f,c[1]+f,'#d9d4ca',' rx="1"');rect(c[0]-v,c[1]-v,c[0]+v,c[1]+v,'#cfe3f5');
+    text(c[0],c[1]+f+4,'Hatch',3.2);
+  }
+  text((w+dx0)/2,st.hatch?Ly/2-st.hatch.flange/2-6:Ly/2-6,'Outworld',4.5);
   ch.forEach((c,i)=>text((c.x0+c.x1)/2,(c.y0+c.y1)/2,i===ch.length-1&&towers.length?`${i+1} (damp)`:String(i+1),4.5));
   for(const s of sockets){
     const [x,y]=s.wall==='end'?[-SOCK_LEN/2,s.uc+s.half+3]:[s.uc,Ly+SOCK_LEN+2.5];

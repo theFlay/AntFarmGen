@@ -430,7 +430,7 @@ function renderStarter(){
   const rows=[['Tray',`${f1(st.Lx)} x ${f1(st.Ly)} mm`],['With sockets',`${f1(st.outW)} x ${f1(st.outD)} mm`],
     ['Outworld',`${f1(S.owLen)} x ${f1(st.Ly-2*st.w)} mm inside, ${f1(S.owH)} mm tall`],['Nest section',`${f1(st.nestH)} mm tall`],
     ['Chambers',`${st.ch.length}, each ${f1(c.x1-c.x0)} x ${f1(c.y1-c.y0)} x ${f1(S.chH)} mm`],['Water towers',String(st.towers.length)],
-    ['Outworld lid',lid(st.lids[0])],['Nest lid',lid(st.lids[1])],['3D prints',`${st.prints.length} STL file${st.prints.length>1?'s':''}`]];
+    ['Outworld lid',lid(st.lids[0])],['Nest lid',lid(st.lids[1])+(S.redSheet?', with a red sheet over it':'')],['3D prints',`${st.prints.length} STL file${st.prints.length>1?'s':''}`]];
   document.getElementById('starterStats').innerHTML=rows.map(([a,b])=>`<div><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
   starterFilesNow=starterFiles(st,P);
   const ok=!st.errors.length;

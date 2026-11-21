@@ -67,7 +67,8 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 - 1 to 4 chambers in bands, doors at alternate ends so the ants walk the length of each, and the last door at the outworld end so the far end of the last chamber stays quiet and damp.
 - Water towers (0 to 2) stand in sockets on the nest end wall. A tube of water stands open end down on a piece of sponge in the socket, and the chamber gets damp through a printed grille of slits (default 0.8mm), so no wick has to be put in mid-print.
 - Two openings: a socket for the test tube (on the outworld end, or the nest front) and a spare port for tubing (12mm by default, to match the Outworld page), with a printed plug for each. The doorway through the wall stays inside the tube's opening.
-- Lids drop into a recess half the wall thick, with a finger notch in the back wall to lift each one. Vent holes in an acrylic outworld lid.
+- Lids drop into a recess half the wall thick, with a finger notch in the back wall to lift each one. The nest recess is two sheets deep by default: a clear lid that keeps the ants in, and a red sheet over it to lift when looking in.
+- The acrylic outworld lid has three vent slits along each long side (0.8mm by default), or a grid of holes, and a feeding hatch like the bought nests: a square hole, a printed hatch whose narrower base drops into it, and a small acrylic window in a recess in its top.
 - A printed tube gauge: holes from 13 to 20mm in 0.5mm steps, for when the tube size is not known.
 - The tray is built from boxes (`meshBoxes` in `src/stl.js`), so it is a closed mesh. Only the round tube sockets are separate solids that touch it.
 
@@ -132,7 +133,7 @@ node tests/live.mjs "text on the page"   # checks the live site
 
 - Edit `src/`, then run `npm run build`. Never edit `index.html` by hand.
 - Every push to `develop` is tested by `.github/workflows/pages.yml`, and only goes live if the tests pass.
-- Current state: 219 unit tests plus the browser tests, all passing.
+- Current state: 221 unit tests plus the browser tests, all passing.
 - After a change, look at rendered output as well as the tests. Several real bugs were only found that way.
 
 ## Project rules

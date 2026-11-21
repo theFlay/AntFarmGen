@@ -188,9 +188,9 @@ await check('starter nest mode builds a tray, reacts to settings and exports a z
   assert.equal(await p.evaluate(()=>window.__nest.starter.ch.length),2);
   await p.selectOption('#s_lidNest','glass');
   assert.equal(await p.$('#starterExports button:has-text("starter-nest-lid.svg")'),null);
-  assert.equal(await p.isVisible('#starterControls [data-f="ventD"]'),true);
+  assert.equal(await p.isVisible('#starterControls [data-f="slitW"]'),true);
   await p.selectOption('#s_lidOw','glass');
-  assert.equal(await p.isVisible('#starterControls [data-f="ventD"]'),false);
+  assert.equal(await p.isVisible('#starterControls [data-f="slitW"]'),false);
   const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#starterZip')]);
   assert.match(dl.suggestedFilename(),/^starter-nest-100x100\.zip$/);
   const [g]=await Promise.all([p.waitForEvent('download'),p.click('#starterGauge')]);

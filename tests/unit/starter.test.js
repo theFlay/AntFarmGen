@@ -5,7 +5,7 @@ import {meshBoxes} from '../../src/stl.js';
 
 const B=c=>buildStarter({...starterDefaults(),...c});
 const CFGS=[{},{tubeOn:'nest'},{towers:0},{towers:2},{chambers:1,towers:1},{chambers:2,towers:2},{chambers:4,L:150,Wd:120},
-  {lidNest:'glass',lidOw:'glass'},{ventD:0},{plugs:false},{tubeOD:20,tubeID:17},{chH:12,owH:40},{L:80,Wd:70,owLen:28,chambers:2}];
+  {lidNest:'glass',lidOw:'glass'},{ventD:0},{plugs:false},{tubeOD:20,tubeID:17},{chH:12,owH:40},{L:80,Wd:70,owLen:28,chambers:2,hatch:false}];
 function parse(u8){
   const dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength),n=dv.getUint32(80,true),tris=[];
   assert.equal(u8.byteLength,84+50*n);
@@ -47,7 +47,7 @@ test('the default tray is 100 x 100, with 3 chambers, one tower and two sockets'
   assert.deepEqual(st.sockets.map(s=>s.name),['test tube','spare port']);
   // the outworld door and one door between each pair of chambers
   assert.equal(st.doors.length,3);
-  assert.equal(st.nestH,st.S.floor+st.S.chH+st.S.lidT);
+  assert.equal(st.nestH,st.S.floor+st.S.chH+2*st.S.lidT);
 });
 test('doorways stay inside the tube opening and above the floor',()=>{
   for(const c of CFGS){
@@ -73,7 +73,7 @@ test('the grille slits are the set width and face the damp chamber',()=>{
   });
 });
 test('lids drop into their recesses with the clearance',()=>{
-  const st=B({lidClear:0.5}),{w,ledge,dx0,dx1,Lx,Ly}=st;
+  const st=B({lidClear:0.5,vents:'holes'}),{w,ledge,dx0,dx1,Lx,Ly}=st;
   const [ow,nest]=st.lids;
   assert.ok(Math.abs(ow.w-(dx0-w+2*ledge-0.5))<1e-9);
   assert.ok(Math.abs(nest.w-(Lx-w+ledge-dx1-0.5))<1e-9);
@@ -83,7 +83,7 @@ test('lids drop into their recesses with the clearance',()=>{
 });
 test('glass lids have no cut file, and plugs can be left out',()=>{
   const names=starterFiles(B({lidNest:'glass',lidOw:'glass',plugs:false})).map(f=>f.name);
-  assert.deepEqual(names,['print-starter-nest-tray.stl']);
+  assert.deepEqual(names,['starter-nest-red-sheet.svg','print-starter-nest-tray.stl']);
   const all=starterFiles(B({})).map(f=>f.name);
   assert.ok(all.includes('starter-nest-lid.svg')&&all.includes('starter-outworld-lid.svg'));
   assert.ok(all.some(n=>/plug-16-4mm/.test(n))&&all.some(n=>/plug-12-4mm/.test(n)));
@@ -102,4 +102,27 @@ test('the tube gauge is one closed plate with a hole for every size',()=>{
   assert.equal(f.name,'print-tube-gauge.stl');
   assert.ok(r.ok&&r.vol>0);
   assert.equal(GAUGE.length,15);
+});
+test('the outworld lid has slits along its long sides and a feeding hatch with a window',()=>{
+  const st=B({}),[ow]=st.lids;
+  assert.equal(ow.holes.length,7);
+  assert.equal(ow.circles.length,0);
+  const names=starterFiles(st).map(f=>f.name);
+  assert.ok(names.includes('starter-hatch-window.svg')&&names.includes('print-starter-feeding-hatch.stl'));
+  const h=st.hatch;
+  // the plug fits the hole, the window sits on a ledge over the view hole
+  assert.ok(h.plug<h.hs&&h.view<h.plug&&h.win>h.view&&h.win<h.flange);
+  assert.ok(closed(parse(starterFiles(st).find(f=>/hatch\.stl/.test(f.name)).data)).ok);
+  // slits run along the long sides, clear of the hatch
+  for(const p of ow.holes.slice(0,6)){const X=p.map(v=>v[0]);assert.ok(Math.max(...X)<ow.w/2-h.hs/2||Math.min(...X)>ow.w/2+h.hs/2);}
+  assert.equal(B({vents:'holes'}).lids[0].holes.length,1);
+  assert.ok(B({vents:'holes'}).lids[0].circles.length>0);
+  assert.ok(B({hatchSize:40}).errors.some(e=>/feeding hatch/.test(e)));
+  assert.ok(!starterFiles(B({lidOw:'glass'})).some(f=>/hatch|outworld-lid/.test(f.name)));
+});
+test('the nest recess holds a clear lid and a red sheet over it',()=>{
+  const two=B({}),one=B({redSheet:false});
+  assert.equal(two.nestH-one.nestH,two.S.lidT);
+  assert.ok(two.lids.some(l=>l.name==='nest red sheet'));
+  assert.ok(!one.lids.some(l=>l.name==='nest red sheet'));
 });
