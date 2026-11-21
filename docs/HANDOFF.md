@@ -8,7 +8,7 @@ Read this first in a new session. It records where the project stands, how it go
 
 ## What the project is
 
-A static web app that turns panel and ant sizes into laser-ready cut files for all-acrylic ant nests, assembled like a jigsaw. Any part can be 3D printed instead. It has three modes: **Nest panel**, **Test tube rack** and **Outworld**. Everything runs in the browser, with no server or accounts.
+A static web app that turns panel and ant sizes into laser-ready cut files for all-acrylic ant nests, assembled like a jigsaw. Any part can be 3D printed instead. It has four modes: **Nest panel**, **Test tube rack**, **Outworld** and **Starter nest**. Everything runs in the browser, with no server or accounts.
 
 ## Where things stand
 
@@ -59,8 +59,18 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 - Flat nests clamp with two bars that lie on the nest's top face. A pin drops through each bar into the nest joining slot either side of the port, and a short wedge key pulls the wall tight to the nest edge. Checks list which nest ports have a joining slot on both sides.
 - Upright nests stand beside the outworld and dock at a port on their left or right edge, the lowest by default or a chosen one. Two edge clips, above and below the port, pass through slits in the wall and grip the front and back of the nest. The clips are a set amount narrower than the nest (grip, default 0.2mm). The window sits at the port's height above the shelf, allowing for the feet. Upright tube docks use the same clips, so they need no joining slots.
 - A tube hole test strip.
+- **Build: printed base, acrylic walls.** Plain acrylic walls (no side tabs, no floor slots) stand 4mm deep in grooves in a printed base, which is the floor. Inside is a 2mm floor with a 4mm lip round it, so the floor top for ports and docks is 6mm, the same as the acrylic box. Toggles: a printed top rim (default on, not with a sliding lid) that caps the walls and holds a plain drop-in lid, with the lip built in for an open top; and printed corner clips that slide down over each corner (one shape, turned over for the mirror corners). Without a rim, the walls keep their top tabs into the lid. A base or rim too long for the printer is split into equal pieces along its length.
 
-**3D printing (all three modes)**
+**Starter nest**
+- A small printed tray for moving a young colony out of its test tube, like the small bought nests: outworld and nest side by side, 100 x 100mm by default, each under its own drop-in lid (cut acrylic, or glass sized from the summary).
+- 1 to 4 chambers in bands, doors at alternate ends so the ants walk the length of each, and the last door at the outworld end so the far end of the last chamber stays quiet and damp.
+- Water towers (0 to 2) stand in sockets on the nest end wall. A tube of water stands open end down on a piece of sponge in the socket, and the chamber gets damp through a printed grille of slits (default 0.8mm), so no wick has to be put in mid-print.
+- Two openings: a socket for the test tube (on the outworld end, or the nest front) and a spare port for tubing (12mm by default, to match the Outworld page), with a printed plug for each. The doorway through the wall stays inside the tube's opening.
+- Lids drop into a recess half the wall thick, with a finger notch in the back wall to lift each one. Vent holes in an acrylic outworld lid.
+- A printed tube gauge: holes from 13 to 20mm in 0.5mm steps, for when the tube size is not known.
+- The tray is built from boxes (`meshBoxes` in `src/stl.js`), so it is a closed mesh. Only the round tube sockets are separate solids that touch it.
+
+**3D printing (all modes)**
 - Every part type has a choice of Acrylic or 3D print. The nest page holds the printer size (width, depth, height) and the laser cutting area (Speedy 300, Speedy 360 or a custom size), and the rack and outworld use the same values.
 - Printed parts come out as binary STL files, one per part type, with the number to print in the file name. They use the same outline and holes as the cut part, without the kerf offset, so they fit the same slots.
 - Parts that print better as one piece: the frame (one solid per section instead of a stack of layers), port plugs (one solid, no pin), vial holders (one piece with their posts), heat channel layers, rack caps, sheaths and the hood, printed outworld tube docks (with a 10mm socket for the tube), printed outworld tube ports (a sleeve, and the wall hole grows to fit it) and printed edge clips (5mm thick).
@@ -93,7 +103,8 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 
 - A custom Exo Terra lid (waiting on a tube size).
 - A printed fit test piece. Printed parts have no fit tuning of their own yet.
-- Splitting a printed part that is too big for the printer. For now it must be set to acrylic.
+- Splitting a printed part that is too big for the printer, except the outworld's printed base and rim. Others must be set to acrylic.
+- A printed body for the Nest panel (back sheet, frame and walls as one print, with an acrylic top sheet), flat or upright. The owner asked for it. Still to agree: how the top sheet fastens to a printed body, and how doors, sponge pockets, sensors, heat and water chambers carry over. Angled shapes would have to be off.
 - Engraved text on printed parts, and a snap catch for the edge clips.
 - A ramp for an upright nest's port, which can be well above the outworld floor.
 - More door types. `src/doors.js` is set up for them.
@@ -103,6 +114,8 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 - Comments shown on the page itself. Feedback goes through GitHub Issues and Discussions.
 
 ## Least proven
+
+The starter nest has not been printed yet: the grille slit width, socket and lid clearances, and whether the tower keeps the chamber damp without flooding it are first guesses. So are the printed base's groove clearance, the rim and the corner clip grip.
 
 The angled joints, the saddle fit on upright nests, the heat groove rim, water chamber sealing, the outworld dock clamp, the edge clip grip, the sliding lid, and every printed part's fit. Peg, key, plug, lip, dock bar, dock pin, dock key, clip and sleeve sizes are first guesses.
 
@@ -118,7 +131,7 @@ node tests/live.mjs "text on the page"   # checks the live site
 
 - Edit `src/`, then run `npm run build`. Never edit `index.html` by hand.
 - Every push to `develop` is tested by `.github/workflows/pages.yml`, and only goes live if the tests pass.
-- Current state: 197 unit tests plus the browser tests, all passing.
+- Current state: 211 unit tests plus the browser tests, all passing.
 - After a change, look at rendered output as well as the tests. Several real bugs were only found that way.
 
 ## Project rules

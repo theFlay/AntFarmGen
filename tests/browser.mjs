@@ -151,6 +151,42 @@ await check('outworld mode builds a box, docks onto the nest and exports a zip',
   const [t]=await Promise.all([p.waitForEvent('download'),p.click('#outTest')]);
   assert.equal(t.suggestedFilename(),'tube-hole-test.svg');
 });
+await check('the outworld can be built on a printed base',async p=>{
+  await p.click('[data-mode="outworld"]');
+  assert.equal(await p.isVisible('#outControls [data-f="pRim"]'),false);
+  await p.selectOption('#o_build','printed');
+  assert.equal(await p.isVisible('#outControls [data-f="pRim"]'),true);
+  assert.equal(await p.isVisible('#outControls [data-f="m_floor"]'),false);
+  assert.ok(await p.$('#outExports button:has-text("print-outworld-base")'));
+  assert.ok(await p.$('#outExports button:has-text("print-outworld-top-rim")'));
+  await p.click('#o_pClips');
+  assert.ok(await p.$('#outExports button:has-text("print-outworld-corner-clip-x4.stl")'));
+  await p.selectOption('#o_lid','slide');
+  assert.equal(await p.isVisible('#outControls [data-f="pRim"]'),false);
+  assert.equal(await p.$('#outExports button:has-text("print-outworld-top-rim")'),null);
+});
+await check('starter nest mode builds a tray, reacts to settings and exports a zip',async p=>{
+  await p.click('[data-mode="starter"]');
+  assert.equal(await p.isVisible('#preview'),false);
+  assert.equal(await p.evaluate(()=>window.__nest.starter.ch.length),3);
+  assert.ok(await p.$('#starterExports button:has-text("print-starter-nest-tray.stl")'));
+  await p.fill('#s_chambers','2');await p.dispatchEvent('#s_chambers','change');
+  assert.equal(await p.evaluate(()=>window.__nest.starter.ch.length),2);
+  await p.selectOption('#s_lidNest','glass');
+  assert.equal(await p.$('#starterExports button:has-text("starter-nest-lid.svg")'),null);
+  assert.equal(await p.isVisible('#starterControls [data-f="ventD"]'),true);
+  await p.selectOption('#s_lidOw','glass');
+  assert.equal(await p.isVisible('#starterControls [data-f="ventD"]'),false);
+  const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#starterZip')]);
+  assert.match(dl.suggestedFilename(),/^starter-nest-100x100\.zip$/);
+  const [g]=await Promise.all([p.waitForEvent('download'),p.click('#starterGauge')]);
+  assert.equal(g.suggestedFilename(),'print-tube-gauge.stl');
+  await p.fill('#s_owH','10');await p.dispatchEvent('#s_owH','change');
+  assert.equal(await p.$eval('#starterZip',b=>b.disabled),true);
+  assert.match(await p.$eval('#pill',e=>e.textContent),/Fix/);
+  await p.click('[data-mode="nest"]');
+  assert.match(await p.$eval('#pill',e=>e.textContent),/Ready/);
+});
 await check('typing a value then clicking download straight away is not lost',async p=>{
   await p.locator('summary:has-text("Auto layout")').scrollIntoViewIfNeeded();
   await p.fill('#p_seed','77');

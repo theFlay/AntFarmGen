@@ -51,10 +51,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .seg button{border:0;background:transparent;padding:5px 10px;border-radius:7px}
 .seg button:hover:not(:disabled){background:var(--card)}
 .seg button.on{background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.14);font-weight:620}
-#outPreview svg{max-height:68vh}
+#outPreview svg,#starterPreview svg{max-height:68vh}
 .tosettings{display:none;font-size:13px;color:var(--accent);font-weight:600}
 @media(max-width:980px){.tosettings{display:inline-block;margin:0 0 8px}}
-#rackPreview svg,#outPreview svg{width:100%;height:auto;display:block;border-radius:8px}
+#rackPreview svg,#outPreview svg,#starterPreview svg{width:100%;height:auto;display:block;border-radius:8px}
 [hidden]{display:none!important}
 #preview svg{width:100%;height:auto;display:block;touch-action:manipulation;margin-top:10px;border-radius:8px}
 .msg{font-size:13px;margin:3px 0}
@@ -86,6 +86,7 @@ footer a{color:var(--accent)}
       <button data-mode="nest" class="on">Nest panel</button>
       <button data-mode="rack">Test tube rack</button>
       <button data-mode="outworld">Outworld</button>
+      <button data-mode="starter">Starter nest</button>
     </div>
     <span id="pill" class="pill good">Ready to export</span>
   </div>
@@ -131,6 +132,29 @@ footer a{color:var(--accent)}
       <div class="row" id="outExports"></div>
       <div class="row" style="margin-top:10px"><button id="outTest">Tube hole test strip</button></div>
       <div id="outStatus" class="msg info"></div>
+    </section>
+  </main>
+</div>
+<div class="wrap" id="starterView" hidden>
+  <aside id="starterControls" aria-label="Starter nest settings"></aside>
+  <main>
+    <section class="card">
+      <a class="tosettings" href="#starterControls">Jump to settings</a>
+      <h2>Starter nest, seen from above</h2>
+      <p class="note">A small 3D printed tray for moving a young colony out of its test tube. The outworld and the nest sit side by side, each under its own drop-in lid. The test tube plugs into a socket, and a water tower keeps the last chamber damp through a printed grille, so no wick is needed.</p>
+      <div id="starterPreview"></div>
+    </section>
+    <div class="two">
+      <section class="card"><h2>Checks</h2><div id="starterChecks"></div></section>
+      <section class="card"><h2>Summary</h2><div id="starterStats" class="stats"></div></section>
+    </div>
+    <section class="card">
+      <h2>Print and cut files</h2>
+      <p class="note">The tray and plugs come out as STL files. Acrylic lids come out as SVG cut files, using the kerf and colours from the Nest panel page. A glass lid only needs the size in the summary.</p>
+      <div class="row" id="starterExports"></div>
+      <div class="row" style="margin-top:10px"><button id="starterGauge">Tube gauge (STL)</button></div>
+      <p class="note" style="margin-top:8px">The gauge is a plate of holes from 13 to 20mm in 0.5mm steps, five to a row, starting at the cut corner. The smallest hole your tube slides into is its outside diameter.</p>
+      <div id="starterStatus" class="msg info"></div>
     </section>
   </main>
 </div>

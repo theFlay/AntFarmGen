@@ -8,7 +8,7 @@ import {derive} from './grid.js';
 import {heatDepth,heatFrameLayers,borderHeatOn,borderRow} from './heat.js';
 import {coverStand,FOOT_LIFT} from './hardware.js';
 import {MAT_OPTS} from './params.js';
-import {partSolid,ringSolid,circlePts,printFile,solidBounds,fitsPrinter} from './stl.js';
+import {partSolid,ringSolid,circlePts,printFile,solidBounds,fitsPrinter,meshBoxes,meshBounds} from './stl.js';
 
 // part types that can be cut or printed
 export const OUT_MATS=[
@@ -21,6 +21,10 @@ export const OUT_MATS=[
   ['bulk','Bulkhead rings'],
 ];
 export const OUT_FIELDS=[
+  {k:'build',l:'Build',d:'acrylic',opts:[['acrylic','All acrylic, tabbed together'],['printed','Printed base, acrylic walls']],h:'Printed base: plain acrylic walls stand in grooves in a 3D printed base. Bases too big for the printer are split into pieces.'},
+  {k:'pRim',l:'Printed top rim',d:true,bool:true,h:'Caps the wall tops and holds the lid in a recess, so the walls need no top tabs. Not with a sliding lid.'},
+  {k:'pClips',l:'Printed corner clips',d:false,bool:true,h:'Slide down over each corner and hold the two walls together.'},
+  {k:'pFit',l:'Groove clearance (mm)',d:0.4,step:0.05,range:[0,2],h:'Added to the sheet thickness for each groove.'},
   {k:'owL',l:'Inside length (mm)',d:250,step:1,range:[60,1500]},
   {k:'owW',l:'Inside width (mm)',d:150,step:1,range:[40,1000],h:'The back and front walls are this wide inside the side walls.'},
   {k:'owH',l:'Inside height (mm)',d:80,step:1,range:[20,400],h:'Measured from the floor. Leave room above any sand or soil.'},
@@ -47,7 +51,8 @@ export const OUT_FIELDS=[
 {
   const holes=O=>O.tubesBack+O.tubesFront+O.tubesSide1+O.tubesSide2>0,clamps=O=>O.dock!=='none'||O.nestDocks>0;
   const up=(O,P)=>P&&P.orient==='upright';
-  const WHEN={lipW:O=>O.lid==='open',dockPort:(O,P)=>O.dock!=='none'&&up(O,P),clipGrip:(O,P)=>clamps(O)&&up(O,P),
+  const pb=O=>O.build==='printed';
+  const WHEN={pRim:O=>pb(O)&&O.lid!=='slide',pClips:pb,pFit:pb,m_floor:O=>!pb(O),lipW:O=>O.lid==='open',dockPort:(O,P)=>O.dock!=='none'&&up(O,P),clipGrip:(O,P)=>clamps(O)&&up(O,P),
     holePlugs:holes,m_tport:holes,m_hplug:O=>holes(O)&&O.holePlugs,m_tdock:O=>O.nestDocks>0,m_bulk:O=>O.bulkheads>0,
     m_clip:(O,P)=>clamps(O)&&up(O,P),m_bar:(O,P)=>clamps(O)&&!up(O,P),m_pin:(O,P)=>clamps(O)&&!up(O,P),m_dkey:(O,P)=>clamps(O)&&!up(O,P)};
   for(const f of OUT_FIELDS)if(WHEN[f.k])f.when=WHEN[f.k];
@@ -56,6 +61,7 @@ export const outDefaults=()=>Object.fromEntries(OUT_FIELDS.map(f=>[f.k,f.d]));
 export const cleanOut=O=>Object.fromEntries(OUT_FIELDS.map(f=>[f.k,cleanParam(f,f.k in O?O[f.k]:f.d)]));
 
 // fixed sizes, first guesses until a test cut
+const PB_FLOOR=2,PB_GROOVE=4,PB_RIM=2.4,PB_LIP=2,RIM_PLATE=2,CC_WALL=2,CC_FIT=0.2,CC_REACH=12;
 const LIFT=3,BAR_W=10,PIN_L=8,SLIT_FIT=0.1,KEY_SLOT=2.7,ARM=4,CLIP_SPINE=4,CLIP_PRINT=5,SLEEVE_WALL=1.6,SOCKET=10;
 export const DOCK_KEY={name:'dock key',key:'dkey',w:12,h:2.6,poly:[[0,0],[12,0],[12,2.6],[0,1.6]],holes:[],circles:[],labels:[]};
 
@@ -88,8 +94,10 @@ export function clipPart(stack,grip,reach,t,thick){
 export function buildOutworld(input,P,geo){
   const O=cleanOut(input),t=P.t,cl=P.slotClear,errors=[],warnings=[],notes=[];
   const pr=k=>O['m_'+k]==='print';
-  const L=O.owL,W=O.owW,floorTop=LIFT+t;
-  const slide=O.lid==='slide',topTabs=O.lid!=='slide';
+  const pbase=O.build==='printed',rim=pbase&&O.pRim&&O.lid!=='slide';
+  const zb=pbase?PB_FLOOR:0;                     // where the walls stand: the bench, or the bottom of a groove
+  const L=O.owL,W=O.owW,floorTop=pbase?PB_FLOOR+PB_GROOVE:LIFT+t;
+  const slide=O.lid==='slide',topTabs=O.lid!=='slide'&&!rim;
   const e=slide?8:4;                             // end walls reach past the side walls, so slots there keep a rim
   const Wt=W+2*t+2*e;
   const Hl=floorTop+O.owH;                       // side walls
@@ -106,13 +114,14 @@ export function buildOutworld(input,P,geo){
   const xs=spread(L,10),ys=spread(W,10);
   // a part drawn with heights measured up from the bench
   function wall(name,key,w,h,f,cuts=[],circles=[]){
-    const p=plate(w,h,f);
+    const p=plate(w,h-zb,f);
     const rz=([u0,z0,u1,z1])=>rectPts(u0+p.ox,h-z1+p.oy,u1+p.ox,h-z0+p.oy);
     return {name,key,w:p.w,h:p.h,poly:p.poly,holes:cuts.map(rz),circles:circles.map(([u,z,d])=>[u+p.ox,h-z+p.oy,d]),labels:[],ox:p.ox,oy:p.oy,H:h};
   }
   const baseSlot=u=>[u-5-cl/2,LIFT-cl/2,u+5+cl/2,LIFT+t+cl/2];
-  const sideTabs=()=>{const f={left:sideZ.map(z=>({u:Hl-z,l:sl,d:t})),right:sideZ.map(z=>({u:Hl-z,l:sl,d:t}))};if(topTabs)f.top=xs.map(u=>({u,l:10,d:t}));return f;};
-  const endCuts=()=>[...[e+t/2,e+1.5*t+W].flatMap(u=>sideZ.map(z=>[u-t/2-cl/2,z-sl/2-cl/2,u+t/2+cl/2,z+sl/2+cl/2])),...ys.map(u=>baseSlot(e+t+u))];
+  // a printed base holds the walls in grooves, so they need no side tabs or floor slots
+  const sideTabs=()=>{const f=pbase?{}:{left:sideZ.map(z=>({u:Hl-z,l:sl,d:t})),right:sideZ.map(z=>({u:Hl-z,l:sl,d:t}))};if(topTabs)f.top=xs.map(u=>({u,l:10,d:t}));return f;};
+  const endCuts=()=>pbase?[]:[...[e+t/2,e+1.5*t+W].flatMap(u=>sideZ.map(z=>[u-t/2-cl/2,z-sl/2-cl/2,u+t/2+cl/2,z+sl/2+cl/2])),...ys.map(u=>baseSlot(e+t+u))];
   const endTabs=()=>topTabs?{top:ys.map(u=>({u:e+t+u,l:10,d:t}))}:{};
   // slits for the clamp bars of a flat nest, at its joining slots either side of the port
   const slitsAt=(w0,w1)=>[w0,w1].map(u=>[u-BAR_W/2-SLIT_FIT,NH.top,u+BAR_W/2+SLIT_FIT,NH.top+t+2*SLIT_FIT]);
@@ -171,7 +180,7 @@ export function buildOutworld(input,P,geo){
       for(let i=0;i<n;i++)holes.push([off+along*(i+0.5)/n,holeZ,portHole]);
     }
     portHoles.push(...holes.map(h=>({wall:label,u:h[0],z:h[1],d:h[2]})));
-    const cuts=w.end?endCuts():xs.map(baseSlot),extra=w.docked?dockCuts:[];
+    const cuts=w.end?endCuts():pbase?[]:xs.map(baseSlot),extra=w.docked?dockCuts:[];
     const lidCut=[e-0.2,Hl,e+2*t+W+0.2,Hl+t+0.3];
     if(w.lidSlot)cuts.push(lidCut);
     parts.push(wall(w.lidSlot?label+' with lid slot':label,w.key,w.end?Wt:L,w.end?Hw:Hl,w.end?endTabs():sideTabs(),[...cuts,...extra],holes));
@@ -199,8 +208,8 @@ export function buildOutworld(input,P,geo){
       if(geo&&!geo.ports.some(p=>p.used&&(p.side==='left'||p.side==='right')))notes.push('On the nest page, mark the port you dock to as used with the Ports tool, so no plug is cut for it.');
     }
   }
-  // floor: sits a little up the walls so their slots keep a rim below
-  {
+  // floor: sits a little up the walls so their slots keep a rim below. A printed base is the floor.
+  if(!pbase){
     const f={top:xs.map(u=>({u,l:10,d:t})),bottom:xs.map(u=>({u,l:10,d:t})),left:ys.map(u=>({u,l:10,d:t})),right:ys.map(u=>({u,l:10,d:t}))};
     const p=plate(L,W,f);
     parts.push({name:'floor',key:'floor',w:p.w,h:p.h,poly:p.poly,holes:[],circles:[],labels:[]});
@@ -221,10 +230,13 @@ export function buildOutworld(input,P,geo){
     return s;
   };
   const lidL=L+2*t+2*e;
-  if(O.lid==='lift')lidParts.push({name:'lid',key:'lid',w:lidL,h:Wt,poly:rectPts(0,0,lidL,Wt),holes:topSlots(),circles:vents(e+t,e+t,L,W),labels:[]});
+  const outL=L+2*t,rimLidW=outL-0.4,rimLidH=Wt-0.4;
+  if(rim&&O.lid==='lift')lidParts.push({name:'lid',key:'lid',w:rimLidW,h:rimLidH,poly:rectPts(0,0,rimLidW,rimLidH),holes:[],circles:vents(t-0.2,e+t-0.2,L,W),labels:[]});
+  else if(O.lid==='lift')lidParts.push({name:'lid',key:'lid',w:lidL,h:Wt,poly:rectPts(0,0,lidL,Wt),holes:topSlots(),circles:vents(e+t,e+t,L,W),labels:[]});
   if(O.lid==='open'){
     const m=O.lipW;
     if(W-2*m<20||L-2*m<20)errors.push('The lip is too wide for this box.');
+    else if(rim)notes.push('The printed rim has the lip built in, so no lip ring is cut.');
     else lidParts.push({name:'lip ring',key:'lid',w:lidL,h:Wt,poly:rectPts(0,0,lidL,Wt),holes:[...topSlots(),rectPts(e+t+m,e+t+m,e+t+L-m,e+t+W-m)],circles:[],labels:[]});
     warnings.push('An open top only holds ants that cannot climb a barrier coating. Paint Fluon or PTFE on the walls just below the lip, and keep it fresh.');
   }
@@ -283,6 +295,48 @@ export function buildOutworld(input,P,geo){
   if(O.ventD>2)warnings.push('Vent holes over 2mm let most small workers out.');
   // printed parts: grouped by type, with the shapes that only make sense printed
   const prints=[],byShape=new Map();
+  if(pbase){
+    const g=O.pFit/2,m=PB_RIM,top=PB_FLOOR+PB_GROOVE;
+    // where the walls stand, seen from above: end walls run the full width, side walls sit between them
+    const walls=[[0,0,t,Wt],[L+t,0,outL,Wt],[t,e,L+t,e+t],[t,e+t+W,L+t,e+2*t+W]];
+    const inside=[t,e+t,L+t,e+t+W],grow=(r,d)=>[r[0]-d,r[1]-d,r[2]+d,r[3]+d];
+    const box=(r,z0,z1)=>[r[0],r[1],z0,r[2],r[3],z1];
+    const foot=[-m,-m,outL+m,Wt+m];
+    const base={add:[box(foot,0,top)],sub:[...walls.map(r=>box(grow(r,g),PB_FLOOR,top+1)),box(grow(inside,-PB_LIP),PB_FLOOR,top+1)]};
+    const pieces=[{name:'base',...base,h:top}];
+    if(rim){
+      // over the wall tops: grooves below, a plate over the walls, and a recess for the lid
+      const z0=Hl-PB_GROOVE,z1=Hl+RIM_PLATE+t,open=O.lid==='open'?grow(inside,-O.lipW):grow(inside,-PB_LIP);
+      pieces.push({name:'top rim',add:[box(foot,z0,z1)],sub:[...walls.map(r=>box(grow(r,g),z0-1,Hl)),box(open,z0-1,z1+1),
+        ...(O.lid==='lift'?[box([0,0,outL,Wt],Hl+RIM_PLATE,z1+1)]:[])],h:z1-z0});
+      const high=[...views.flatMap(v=>[...v.cuts.map(c=>c[3]),...v.holes.map(([,z,d])=>z+d/2)])];
+      if(high.some(z=>z>z0-1))errors.push('A tube hole or dock reaches up into the top rim. Make the outworld taller, or turn the rim off.');
+    }
+    // split anything too big for the printer into equal pieces along its length, joined under the walls
+    for(const pc of pieces){
+      const len=foot[2]-foot[0],wid=foot[3]-foot[1];
+      let k=1;
+      while(k<8&&!fitsPrinter({w:len/k,d:wid,h:pc.h},P))k++;
+      if(!fitsPrinter({w:len/k,d:wid,h:pc.h},P)){errors.push(`The printed ${pc.name} is ${f1(wid)}mm wide, too big for the print area even in pieces. Make the outworld narrower.`);continue;}
+      for(let i=0;i<k;i++){
+        const x0=foot[0]+len*i/k,x1=foot[0]+len*(i+1)/k,clip=b=>[Math.max(b[0],x0),b[1],b[2],Math.min(b[3],x1),b[4],b[5]];
+        const add=pc.add.map(clip).filter(b=>b[3]>b[0]),sub=pc.sub.map(clip).filter(b=>b[3]>b[0]);
+        prints.push({name:k>1?`${pc.name} piece ${i+1} of ${k}`:pc.name,qty:1,tris:meshBoxes(add,sub)});
+      }
+      if(k>1)notes.push(`The printed ${pc.name} is split into ${k} pieces. The walls span the joins and hold them in line. Glue the joins, or tape them underneath.`);
+    }
+    if(O.pClips){
+      // seen from above at the corner x=0, y=0: the end wall runs along y, the side wall starts at x=t, y=e
+      const c=CC_WALL,f=CC_FIT,a=CC_REACH,h0=top,h1=rim?Hl-PB_GROOVE:Hl,run=50;
+            // a prism, so turned over it fits the mirror-image corners too
+      const add=[[-c-f,-c-f,h0,t+c+f,e+t+a,h1],[t,e-c-f,h0,t+a,e+t+c+f,h1]];
+      const sub=[[-f,-f,h0-1,t+f,e+t+a+run,h1+1],[t-f,e-f,h0-1,t+a+run,e+t+f,h1+1]];
+      prints.push({name:'corner clip',qty:4,tris:meshBoxes(add,sub)});
+      if(h1-h0<10)errors.push('The walls are too short for corner clips.');
+    }
+    notes.push(`The walls stand ${PB_GROOVE}mm deep in the base${rim?' and the rim':''}. The floor inside is ${PB_FLOOR}mm up, with a ${PB_GROOVE}mm lip round it. Fill sand to the top of the lip.`);
+    if(slide&&!O.pClips)notes.push('With a sliding lid and no rim, only the base holds the walls. Turn on corner clips, or glue the corners.');
+  }
   for(const p of [...parts,...lidParts,...conn])if(pr(p.key)){
     const sig=JSON.stringify([p.key,p.thick,p.poly,p.holes,p.circles]);
     if(!byShape.has(sig))byShape.set(sig,{p,qty:0,names:new Set()});
@@ -300,14 +354,14 @@ export function buildOutworld(input,P,geo){
     prints.push({name:'tube sleeve',qty:nHoles,solids:[ringSolid(circlePts(c,c,fl),circlePts(c,c,D),0,2),ringSolid(circlePts(c,c,sleeveOD),circlePts(c,c,D),2,2+t+8)]});
   }
   for(const it of prints){
-    const b=solidBounds(it.solids);
+    const b=it.tris?meshBounds(it.tris):solidBounds(it.solids);
     if(!fitsPrinter(b,P))errors.push(`The printed ${it.name} is ${f1(b.w)} x ${f1(b.d)} x ${f1(b.h)}mm, too big for the ${P.printW} x ${P.printD} x ${P.printH}mm print area. Set it to acrylic.`);
   }
   const cut=list=>list.filter(p=>!pr(p.key));
   for(const p of cut([...parts,...lidParts,...conn]))if(p.w>P.stockW-10||p.h>P.stockH-10)errors.push(`The ${p.name} is ${fmt(p.w)} x ${fmt(p.h)}mm, too big for the ${P.stockW} x ${P.stockH}mm sheet.`);
   if(prints.length)notes.push('Printed parts match the acrylic sizes with no kerf offset. Print one first and check it fits.');
   return {O,P,parts,lidParts,conn,prints,cutParts:cut(parts),cutLid:cut(lidParts),cutConn:cut(conn),
-    errors:[...new Set(errors)],warnings:[...new Set(warnings)],notes:[...new Set(notes)],L,W,Wt,Hl,Hw,e,floorTop,outL:L+2*t,portHoles,views,nDock,NH,upright,dock,clipH,reach};
+    errors:[...new Set(errors)],warnings:[...new Set(warnings)],notes:[...new Set(notes)],L,W,Wt,Hl,Hw,e,floorTop,outL:L+2*t,portHoles,views,nDock,NH,upright,dock,clipH,reach,pbase,rim,zb};
 }
 
 export function outworldFiles(ow,colors){
@@ -350,7 +404,7 @@ export function outworldPreview(ow){
   o.push(`<rect x="0" y="0" width="${fmt(t)}" height="${fmt(Wt)}" fill="${wallC}"/><rect x="${fmt(outL-t)}" y="0" width="${fmt(t)}" height="${fmt(Wt)}" fill="${wallC}"/>`);
   for(const y of [e,e+t+ow.W])o.push(`<rect x="${fmt(t)}" y="${fmt(y)}" width="${fmt(L)}" height="${fmt(t)}" fill="${wallC}"/>`);
   if(O.lid==='open')o.push(`<rect x="${fmt(t+O.lipW)}" y="${fmt(e+t+O.lipW)}" width="${fmt(L-2*O.lipW)}" height="${fmt(ow.W-2*O.lipW)}" fill="none" stroke="#8c867a" stroke-dasharray="3 2" stroke-width="0.6"/>`);
-  o.push(`<text x="${fmt(outL/2)}" y="${fmt(Wt/2+2)}" font-size="9" text-anchor="middle" fill="#55606a">${O.lid==='slide'?'sliding lid comes out this way &#8594;':'floor'}</text>`);
+  o.push(`<text x="${fmt(outL/2)}" y="${fmt(Wt/2+2)}" font-size="9" text-anchor="middle" fill="#55606a">${O.lid==='slide'?'sliding lid comes out this way &#8594;':ow.pbase?'printed base':'floor'}</text>`);
   // where a point (u along the wall, z up it) lands once the wall is folded out
   const place={back:(u,z)=>[-z,u],front:(u,z)=>[outL+z,u],top:(u,z)=>[t+u,-z],bottom:(u,z)=>[t+u,Wt+z]};
   const turn={back:-90,front:90,top:0,bottom:0};

@@ -16,6 +16,7 @@ import {cleanLayout,cleanParam,escapeHtml} from './sanitize.js';
 import JSZip from 'jszip';
 import {RACK_FIELDS,buildRack,rackFiles,rackHoleTest,rackPreview,rackDefaults,cleanRack} from './rack.js';
 import {OUT_FIELDS,buildOutworld,outworldFiles,outworldPreview,outDefaults,tubeHoleTest} from './outworld.js';
+import {STARTER_FIELDS,buildStarter,starterFiles,starterPreview,starterDefaults,tubeGauge} from './starter.js';
 // a long choice gets a row of its own, so its text is not cut off
 function fieldHtml(f,id){
   let input;
@@ -152,7 +153,7 @@ function lineUp(){
 // Only rebuilds buttons when they really change. Rebuilding between a mouse press and release
 // would lose the click, which happened when typing a value and clicking download straight away.
 function setButtons(el,html){if(el._html!==html){el.innerHTML=html;el._html=html;}}
-function setStatus(s){document.getElementById('status').textContent=s;for(const id of ['rackStatus','outStatus']){const r=document.getElementById(id);if(r)r.textContent=s;}}
+function setStatus(s){document.getElementById('status').textContent=s;for(const id of ['rackStatus','outStatus','starterStatus']){const r=document.getElementById(id);if(r)r.textContent=s;}}
 
 /* ---------------- editing ---------------- */
 function onPreviewClick(ev){
@@ -390,6 +391,51 @@ function renderOut(){
     pill.textContent=!ok?'Fix the checks':warns?`Ready, ${warns} warning${warns>1?'s':''}`:'Ready to export';
   }
 }
+/* ---------------- starter nest ---------------- */
+let starterState=starterDefaults(),starterFilesNow=[];
+function buildStarterForm(){
+  const groups=[...new Set(STARTER_FIELDS.map(f=>f.g||'Tray'))];
+  let html='';
+  for(const g of groups){
+    html+=`<div class="group"><details${g==='Printing'?'':' open'}><summary>${g}</summary>`;
+    for(const f of STARTER_FIELDS.filter(x=>(x.g||'Tray')===g))html+=fieldHtml(f,'s_'+f.k);
+    html+='</details></div>';
+  }
+  html+='<p class="note">The printer size, kerf and cut colours come from the Nest panel page.</p>';
+  document.getElementById('starterControls').innerHTML=html;
+  for(const f of STARTER_FIELDS){
+    const el=document.getElementById('s_'+f.k);
+    if(f.bool)el.checked=!!f.d;else el.value=f.d;
+    el.addEventListener('change',()=>{
+      starterState[f.k]=f.bool?el.checked:f.opts?el.value:parseFloat(el.value);
+      renderStarter();
+    });
+  }
+}
+function renderStarter(){
+  const st=buildStarter(starterState,P);
+  showWhen('starterControls',STARTER_FIELDS,st.S);
+  window.__nest.starter=st;
+  document.getElementById('starterPreview').innerHTML=starterPreview(st);
+  const msgs=[...st.errors.map(m=>['error',m]),...st.warnings.map(m=>['warn',m]),...st.notes.map(m=>['info',m])];
+  if(!st.errors.length)msgs.unshift(['ok','Ready to export.']);
+  document.getElementById('starterChecks').innerHTML=msgs.map(([lv,m])=>`<div class="msg ${lv}">${escapeHtml(m)}</div>`).join('');
+  const S=st.S,c=st.ch[0],lid=l=>`${f1(l.w)} x ${f1(l.h)} x ${f1(S.lidT)} mm${l.kind==='glass'?', glass':''}`;
+  const rows=[['Tray',`${f1(st.Lx)} x ${f1(st.Ly)} mm`],['With sockets',`${f1(st.outW)} x ${f1(st.outD)} mm`],
+    ['Outworld',`${f1(S.owLen)} x ${f1(st.Ly-2*st.w)} mm inside, ${f1(S.owH)} mm tall`],['Nest section',`${f1(st.nestH)} mm tall`],
+    ['Chambers',`${st.ch.length}, each ${f1(c.x1-c.x0)} x ${f1(c.y1-c.y0)} x ${f1(S.chH)} mm`],['Water towers',String(st.towers.length)],
+    ['Outworld lid',lid(st.lids[0])],['Nest lid',lid(st.lids[1])],['3D prints',`${st.prints.length} STL file${st.prints.length>1?'s':''}`]];
+  document.getElementById('starterStats').innerHTML=rows.map(([a,b])=>`<div><span>${escapeHtml(a)}:</span> ${escapeHtml(b)}</div>`).join('');
+  starterFilesNow=starterFiles(st,P);
+  const ok=!st.errors.length;
+  setButtons(document.getElementById('starterExports'),`<button id="starterZip" class="primary"${ok?'':' disabled'}>Download everything (.zip)</button>`+
+    starterFilesNow.map((f,i)=>`<button data-starter="${i}"${ok?'':' disabled'}>${escapeHtml(f.name)}</button>`).join(''));
+  if(mode==='starter'){
+    const pill=document.getElementById('pill'),warns=st.warnings.length;
+    pill.className='pill '+(!ok?'bad':warns?'warn':'good');
+    pill.textContent=!ok?'Fix the checks':warns?`Ready, ${warns} warning${warns>1?'s':''}`:'Ready to export';
+  }
+}
 let mode='nest';
 function setMode(m){
   mode=m;
@@ -397,13 +443,15 @@ function setMode(m){
   document.getElementById('nestView').hidden=m!=='nest';
   document.getElementById('rackView').hidden=m!=='rack';
   document.getElementById('outView').hidden=m!=='outworld';
-  if(m==='rack')renderRack();else if(m==='outworld')renderOut();else render();
+  document.getElementById('starterView').hidden=m!=='starter';
+  if(m==='rack')renderRack();else if(m==='outworld')renderOut();else if(m==='starter')renderStarter();else render();
 }
 
 function init(){
   buildForm();
   buildRackForm();
   buildOutForm();
+  buildStarterForm();
   P=readParams();
   render();
   document.getElementById('preview').addEventListener('click',onPreviewClick);
@@ -427,6 +475,16 @@ function init(){
       return;
     }
     const f=outFilesNow[+b.dataset.out];if(f)await saveFile(f.name,f.data);
+  });
+  document.getElementById('starterGauge').addEventListener('click',()=>{const f=tubeGauge();saveFile(f.name,f.data);});
+  document.getElementById('starterExports').addEventListener('click',async ev=>{
+    const b=ev.target.closest('button');if(!b||b.disabled)return;
+    if(b.id==='starterZip'){
+      const zip=new JSZip();for(const f of starterFilesNow)zip.file(f.name,f.data);
+      await saveFile(`starter-nest-${starterState.L}x${starterState.Wd}.zip`,await zip.generateAsync({type:'blob'}));
+      return;
+    }
+    const f=starterFilesNow[+b.dataset.starter];if(f)await saveFile(f.name,f.data);
   });
   document.querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>{
     tool=b.dataset.tool;joinFrom=null;routeEnds=[];document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x===b));render();

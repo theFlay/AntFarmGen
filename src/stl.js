@@ -56,7 +56,52 @@ export function shapesToSolids(shapes,z0,z1){
 export const partSolid=(p,z0,z1)=>({outer:p.poly,holes:[...(p.holes||[]),...(p.circles||[]).map(([x,y,d])=>circlePts(x,y,d))],z0,z1});
 export const ringSolid=(outer,inner,z0,z1)=>({outer,holes:[inner],z0,z1});
 
-export function meshSolids(solids){
+export const meshSolids=solids=>toBed(meshInPlace(solids));
+// moves a mesh onto the print bed, as new points: triangles can share point arrays
+export function toBed(tris){
+  const m=[Infinity,Infinity,Infinity];
+  for(const t of tris)for(const v of t)for(let k=0;k<3;k++)if(v[k]<m[k])m[k]=v[k];
+  return tris.map(t=>t.map(v=>v.map((x,k)=>x-m[k])));
+}
+// A solid made of boxes: the union of `add` minus the union of `sub`, each box [x0,y0,z0,x1,y1,z1].
+// Every box edge becomes a grid line, so faces meet edge to edge and the mesh is closed.
+export function meshBoxes(add,sub){
+  const axis=k=>[...new Set([...add,...sub].flatMap(b=>[b[k],b[k+3]]).map(v=>Math.round(v*1e5)/1e5))].sort((a,b)=>a-b);
+  const X=axis(0),Y=axis(1),Z=axis(2),nx=X.length-1,ny=Y.length-1,nz=Z.length-1;
+  const inBox=(b,x,y,z)=>x>b[0]&&x<b[3]&&y>b[1]&&y<b[4]&&z>b[2]&&z<b[5];
+  const solid=new Uint8Array(nx*ny*nz),at=(i,j,k)=>i<0||j<0||k<0||i>=nx||j>=ny||k>=nz?0:solid[(i*ny+j)*nz+k];
+  for(let i=0;i<nx;i++){
+    const x=(X[i]+X[i+1])/2,A=add.filter(b=>x>b[0]&&x<b[3]),S=sub.filter(b=>x>b[0]&&x<b[3]);
+    for(let j=0;j<ny;j++){
+      const y=(Y[j]+Y[j+1])/2;
+      for(let k=0;k<nz;k++){
+        const z=(Z[k]+Z[k+1])/2;
+        solid[(i*ny+j)*nz+k]=A.some(b=>inBox(b,x,y,z))&&!S.some(b=>inBox(b,x,y,z))?1:0;
+      }
+    }
+  }
+  const tris=[],quad=(a,b,c,d)=>tris.push([a,b,c],[a,c,d]);
+  for(let i=0;i<nx;i++)for(let j=0;j<ny;j++)for(let k=0;k<nz;k++){
+    if(!at(i,j,k))continue;
+    const x0=X[i],x1=X[i+1],y0=Y[j],y1=Y[j+1],z0=Z[k],z1=Z[k+1];
+    if(!at(i+1,j,k))quad([x1,y0,z0],[x1,y1,z0],[x1,y1,z1],[x1,y0,z1]);
+    if(!at(i-1,j,k))quad([x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0]);
+    if(!at(i,j+1,k))quad([x0,y1,z0],[x0,y1,z1],[x1,y1,z1],[x1,y1,z0]);
+    if(!at(i,j-1,k))quad([x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]);
+    if(!at(i,j,k+1))quad([x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]);
+    if(!at(i,j,k-1))quad([x0,y0,z0],[x0,y1,z0],[x1,y1,z0],[x1,y0,z0]);
+  }
+  return tris;
+}
+// moves every point with f, keeping the faces pointing outwards if f mirrors
+export function mapMesh(tris,f){
+  const [o,a,b,c]=[[0,0,0],[1,0,0],[0,1,0],[0,0,1]].map(f),d=[a,b,c].map(v=>v.map((x,k)=>x-o[k]));
+  const det=d[0][0]*(d[1][1]*d[2][2]-d[1][2]*d[2][1])-d[0][1]*(d[1][0]*d[2][2]-d[1][2]*d[2][0])+d[0][2]*(d[1][0]*d[2][1]-d[1][1]*d[2][0]);
+  return tris.map(([p,q,r])=>det<0?[f(p),f(r),f(q)]:[f(p),f(q),f(r)]);
+}
+// a printable item from a finished mesh, for printFile
+export const meshItem=(name,qty,tris)=>({name,qty,tris});
+export function meshInPlace(solids){
   const tris=[];
   for(const s of solids){
     let outer=clean(s.outer.map(([x,y])=>[x,-y]));       // seen from above, as in the cut file
@@ -83,12 +128,12 @@ export function meshSolids(solids){
       tris.push([[...a,s.z0],[...b,s.z0],[...b,s.z1]],[[...a,s.z0],[...b,s.z1],[...a,s.z1]]);
     }
   }
-  // move it onto the print bed
-  if(tris.length){
-    const m=[0,1,2].map(k=>Math.min(...tris.flatMap(t=>t.map(v=>v[k]))));
-    for(const t of tris)for(const v of t)for(let k=0;k<3;k++)v[k]-=m[k];
-  }
   return tris;
+}
+export function meshBounds(tris){
+  const lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];
+  for(const t of tris)for(const v of t)for(let k=0;k<3;k++){if(v[k]<lo[k])lo[k]=v[k];if(v[k]>hi[k])hi[k]=v[k];}
+  return tris.length?{w:hi[0]-lo[0],d:hi[1]-lo[1],h:hi[2]-lo[2]}:{w:0,d:0,h:0};
 }
 export function solidBounds(solids){
   const X=[],Y=[],Z=[];
@@ -116,6 +161,6 @@ export const fitsPrinter=(b,P)=>((b.w<=P.printW&&b.d<=P.printD)||(b.w<=P.printD&
 export const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 // one STL per part type, with the number to print in its name
 export function printFile(item){
-  const tris=meshSolids(item.solids);
+  const tris=item.tris?toBed(item.tris):meshSolids(item.solids);
   return {name:`print-${slug(item.name)}${item.qty>1?'-x'+item.qty:''}.stl`,data:stlBinary(tris,item.name),tris:tris.length,print:true};
 }
