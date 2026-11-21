@@ -1,6 +1,6 @@
 # Ant nest panel generator
 
-Enter panel and ant sizes, then laser-cut the files it gives you and assemble the nest like a jigsaw. Everything is acrylic. Cement and bolts are optional. It also makes test tube racks for founding queens, outworlds, and a small 3D printed starter nest for moving a young colony out of its test tube.
+Enter panel and ant sizes, then laser-cut the files it gives you and assemble the nest like a jigsaw. Everything is acrylic. Cement and bolts are optional. It also makes test tube racks for founding queens, outworlds, and a small 3D printed starter nest for moving a young colony out of its test tube, alone or as stackable rows of nests.
 
 Use it at [theflay.github.io/AntFarmGen](https://theflay.github.io/AntFarmGen/), or open `index.html` from a copy of this repo. It is one self-contained file.
 
@@ -38,6 +38,8 @@ Edit the code in `src/`, then run `npm run build` to rebuild `index.html`. Do no
 | `src/outworld.js` | Outworlds, all acrylic or on a printed base |
 | `src/printedbody.js` | A nest panel as one printed body with acrylic sheets |
 | `src/starter.js` | The 3D printed starter nest and tube gauge |
+| `src/starterrow.js` | Rows of starter nests: rails, joint lugs, end caps, legs |
+| `src/startercommon.js` | Parts both starter layouts share: tube sockets, plugs, lids |
 | `src/stl.js` | STL output, including solids built from boxes |
 | `src/draw.js` | Preview and assembly map |
 | `src/app.js` | UI, undo, save and load |

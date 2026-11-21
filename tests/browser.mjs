@@ -201,6 +201,26 @@ await check('starter nest mode builds a tray, reacts to settings and exports a z
   await p.click('[data-mode="nest"]');
   assert.match(await p.$eval('#pill',e=>e.textContent),/Ready/);
 });
+await check('starter nest mode builds a stacked row of nests',async p=>{
+  await p.click('[data-mode="starter"]');
+  assert.equal(await p.isVisible('#starterControls [data-f="rows"]'),false);
+  await p.selectOption('#s_layout','row');
+  assert.equal(await p.isVisible('#starterControls [data-f="rows"]'),true);
+  assert.equal(await p.isVisible('#starterControls [data-f="L"]'),false);
+  assert.equal(await p.isVisible('#starterControls [data-f="rowGap"]'),false);
+  await p.fill('#s_rows','2');await p.dispatchEvent('#s_rows','change');
+  assert.equal(await p.isVisible('#starterControls [data-f="rowGap"]'),true);
+  assert.equal(await p.evaluate(()=>window.__nest.starter.row.n),4);
+  assert.ok(await p.$('#starterExports button:has-text("print-starter-row-nest-mirrored-x4.stl")'));
+  assert.ok(await p.$('#starterExports button:has-text("print-starter-row-leg-x10.stl")'));
+  assert.match(await p.$eval('#starterPreview',e=>e.innerHTML),/Row 2, mirrored/);
+  assert.match(await p.$eval('#starterStats',e=>e.textContent),/4 nests, 2 rows stacked/);
+  await p.selectOption('#s_countBy','space');
+  await p.fill('#s_space','600');await p.dispatchEvent('#s_space','change');
+  assert.equal(await p.evaluate(()=>window.__nest.starter.row.n),9);
+  const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#starterZip')]);
+  assert.match(dl.suggestedFilename(),/^starter-row-9x2\.zip$/);
+});
 await check('typing a value then clicking download straight away is not lost',async p=>{
   await p.locator('summary:has-text("Auto layout")').scrollIntoViewIfNeeded();
   await p.fill('#p_seed','77');

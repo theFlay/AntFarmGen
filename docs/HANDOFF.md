@@ -71,6 +71,10 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 - The acrylic outworld lid has three vent slits along each long side (0.8mm by default), or a grid of holes, and a feeding hatch like the bought nests: a square hole, a printed hatch whose narrower base drops into it, and a small acrylic window in a recess in its top.
 - A printed tube gauge: holes from 13 to 20mm in 0.5mm steps, for when the tube size is not known.
 - The tray is built from boxes (`meshBoxes` in `src/stl.js`), so it is a closed mesh. Only the round tube sockets are separate solids that touch it.
+- **Row layout** (`src/starterrow.js`): a row of nests, a set number or as many as fit a length. Each nest is its own narrow print with the outworld across the front and the chambers behind it. The test tube and spare port go in the front (the spare can move to the back, into the last chamber), and one water tower stands on the back wall at the left, with the last door at the right so that end stays quiet.
+- Nests join side by side: T rails on the right wall slide down into slots in the left wall of the next nest (side walls are 4.85mm for the slot), and each joint has a lug front and back, half on each nest, with a square pin hole through it. End caps finish the row: one with rails, one with slots, each with the outer half lugs. Vertical sliding cannot lock both ways, so a nest can lift out upwards; that is also how one comes out for cleaning.
+- Rows stack on printed legs. A leg's lower pin goes into the top of a joint hole, its upper pin into the bottom of the joint hole above, so the legs also lock the joints. The gap is from the top of the outworld below to the floor above (default 40mm). Legs print lying on the side their pins sit flush with, which faces the nests. Short feet lock the bottom row's joints.
+- Every second row is mirrored, so its tower sits on the right. A tube in a lower tower then clears the row above and is only limited by the row two above, unless a spare port on the back sits over it. The summary gives the tallest tube.
 
 **3D printing (all modes)**
 - Every part type has a choice of Acrylic or 3D print. The nest page holds the printer size (width, depth, height) and the laser cutting area (Speedy 300, Speedy 360 or a custom size), and the rack and outworld use the same values.
@@ -117,7 +121,7 @@ Good first real build: a test tube rack, because it is a much smaller cut than a
 
 ## Least proven
 
-The starter nest has not been printed yet: the grille slit width, socket and lid clearances, and whether the tower keeps the chamber damp without flooding it are first guesses. So are the printed base's groove clearance, the rim and the corner clip grip, and on the printed nest body the sheet recess, tile seams, edge clip grip, plug and adaptor fit.
+The starter nest has not been printed yet: the grille slit width, socket and lid clearances, and whether the tower keeps the chamber damp without flooding it are first guesses. In the row layout so are the rail and slot clearance, the pin fit, and whether legs and pins hold a stack of rows steady. So are the printed base's groove clearance, the rim and the corner clip grip, and on the printed nest body the sheet recess, tile seams, edge clip grip, plug and adaptor fit.
 
 The angled joints, the saddle fit on upright nests, the heat groove rim, water chamber sealing, the outworld dock clamp, the edge clip grip, the sliding lid, and every printed part's fit. Peg, key, plug, lip, dock bar, dock pin, dock key, clip and sleeve sizes are first guesses.
 
@@ -133,7 +137,7 @@ node tests/live.mjs "text on the page"   # checks the live site
 
 - Edit `src/`, then run `npm run build`. Never edit `index.html` by hand.
 - Every push to `develop` is tested by `.github/workflows/pages.yml`, and only goes live if the tests pass.
-- Current state: 221 unit tests plus the browser tests, all passing.
+- Current state: 229 unit tests plus the browser tests, all passing.
 - After a change, look at rendered output as well as the tests. Several real bugs were only found that way.
 
 ## Project rules

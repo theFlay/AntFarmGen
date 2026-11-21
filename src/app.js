@@ -427,7 +427,14 @@ function renderStarter(){
   if(!st.errors.length)msgs.unshift(['ok','Ready to export.']);
   document.getElementById('starterChecks').innerHTML=msgs.map(([lv,m])=>`<div class="msg ${lv}">${escapeHtml(m)}</div>`).join('');
   const S=st.S,c=st.ch[0],lid=l=>`${f1(l.w)} x ${f1(l.h)} x ${f1(S.lidT)} mm${l.kind==='glass'?', glass':''}`;
-  const rows=[['Tray',`${f1(st.Lx)} x ${f1(st.Ly)} mm`],['With sockets',`${f1(st.outW)} x ${f1(st.outD)} mm`],
+  const R=st.row,rows=R?[['Row',`${R.n} nest${R.n>1?'s':''}${R.R>1?`, ${R.R} rows stacked`:''}`],['Row length',`${f1(R.len)} mm with the end caps`],
+    ['Each nest',`${f1(st.Lx)} x ${f1(st.Ly)} mm`],['Front to back',`${f1(st.outD)} mm with sockets, lugs and towers`],['Height',`${f1(R.height)} mm`],
+    ...(R.R>1?[['Row spacing',`${f1(R.pitch)} mm, legs ${f1(R.legL+2*R.pinL)} mm long`]]:[]),
+    ['Outworld',`${f1(st.Lx-2*R.sw)} x ${f1(S.owLen)} mm inside, ${f1(S.owH)} mm tall`],['Nest section',`${f1(st.nestH)} mm tall`],
+    ['Chambers',`${st.ch.length}, each ${f1(c.x1-c.x0)} x ${f1(c.y1-c.y0)} x ${f1(S.chH)} mm`],
+    ['Water towers',st.towers.length?(Number.isFinite(R.tubeMax)?`1 per nest, tubes up to ${f1(R.tubeMax)} mm`:'1 per nest'):'None'],
+    ['Outworld lid',lid(st.lids[0])+`, ${R.n*R.R} of them`],['Nest lid',lid(st.lids[1])+(S.redSheet?', with a red sheet over it':'')],
+    ['3D prints',`${st.prints.length} STL files`]]:[['Tray',`${f1(st.Lx)} x ${f1(st.Ly)} mm`],['With sockets',`${f1(st.outW)} x ${f1(st.outD)} mm`],
     ['Outworld',`${f1(S.owLen)} x ${f1(st.Ly-2*st.w)} mm inside, ${f1(S.owH)} mm tall`],['Nest section',`${f1(st.nestH)} mm tall`],
     ['Chambers',`${st.ch.length}, each ${f1(c.x1-c.x0)} x ${f1(c.y1-c.y0)} x ${f1(S.chH)} mm`],['Water towers',String(st.towers.length)],
     ['Outworld lid',lid(st.lids[0])],['Nest lid',lid(st.lids[1])+(S.redSheet?', with a red sheet over it':'')],['3D prints',`${st.prints.length} STL file${st.prints.length>1?'s':''}`]];
@@ -487,7 +494,8 @@ function init(){
     const b=ev.target.closest('button');if(!b||b.disabled)return;
     if(b.id==='starterZip'){
       const zip=new JSZip();for(const f of starterFilesNow)zip.file(f.name,f.data);
-      await saveFile(`starter-nest-${starterState.L}x${starterState.Wd}.zip`,await zip.generateAsync({type:'blob'}));
+      const R=window.__nest.starter?.row;
+      await saveFile(R?`starter-row-${R.n}x${R.R}.zip`:`starter-nest-${starterState.L}x${starterState.Wd}.zip`,await zip.generateAsync({type:'blob'}));
       return;
     }
     const f=starterFilesNow[+b.dataset.starter];if(f)await saveFile(f.name,f.data);
